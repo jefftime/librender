@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.0.0 FATAL_ERROR)
+project(render LANGUAGES C)
+add_library(render "./src/render.c")
+add_dependencies(render error window)
+target_include_directories(render PUBLIC "./src")
+target_link_libraries(render error window)
