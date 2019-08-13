@@ -73,7 +73,8 @@ static enum render_error create_instance(struct render *r) {
 
 static enum render_error load_instance_functions(struct render *r) {
 #define load(f) \
-  if (!(r->f = (PFN_##f) r->vkGetInstanceProcAddr(r->instance, #f))) return -1;
+  if (!(r->f = (PFN_##f) r->vkGetInstanceProcAddr(r->instance, #f))) \
+    return RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD;
 
   load(vkGetDeviceProcAddr);
   load(vkEnumeratePhysicalDevices);
@@ -182,8 +183,6 @@ static enum render_error create_surface(struct render *r, struct window *w) {
 
 static enum render_error get_queue_props(struct render *r) {
   uint32_t n_props;
-  VkResult result;
-
   r->vkGetPhysicalDeviceQueueFamilyProperties(r->phys_devices[r->phys_id],
                                               &n_props,
                                               NULL);
@@ -213,7 +212,7 @@ static enum render_error get_present_and_graphics_indices(struct render *r) {
     }
     result =
       r->vkGetPhysicalDeviceSurfaceSupportKHR(r->phys_devices[r->phys_id],
-                                              i,
+                                              (uint32_t) i,
                                               r->surface,
                                               &present_support);
     if (result != VK_SUCCESS) return RENDER_ERROR_VK_QUEUE_INDICES;
@@ -253,13 +252,13 @@ static enum render_error create_device(struct render *r) {
                              &create_info,
                              NULL,
                              &r->device);
-  if (result != VK_SUCCESS) return -1;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_DEVICE;
   r->vkGetDeviceQueue(r->device,
-                      r->queue_index_graphics,
+                      (uint32_t) r->queue_index_graphics,
                       0,
                       &r->graphics_queue);
   r->vkGetDeviceQueue(r->device,
-                      r->queue_index_present,
+                      (uint32_t) r->queue_index_present,
                       0,
                       &r->present_queue);
   return RENDER_ERROR_NONE;
@@ -326,7 +325,7 @@ static enum render_error create_swapchain(struct render *r) {
   VkSurfaceCapabilitiesKHR caps;
   VkResult result;
 
-  chkerr(get_surface_caps(r, &caps));
+  chkerrt(enum render_error, get_surface_caps(r, &caps));
   create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   create_info.surface = r->surface;
   create_info.minImageCount = 2;
@@ -346,16 +345,16 @@ static enum render_error create_swapchain(struct render *r) {
                                    &r->swapchain);
   if (result != VK_SUCCESS) return RENDER_ERROR_VK_SWAPCHAIN;
   r->swap_extent = caps.currentExtent;
-  chkerr(get_swapchain_images(r));
+  chkerrt(enum render_error, get_swapchain_images(r));
   return RENDER_ERROR_NONE;
 }
 
 static enum render_error read_shader(char *filename,
                                      unsigned char **out,
-                                     unsigned long *out_len) {
+                                     size_t *out_len) {
   unsigned char *buf;
   long size;
-  unsigned long read;
+  size_t read;
   FILE *f;
 
   f = fopen(filename, "rb");
@@ -367,9 +366,9 @@ static enum render_error read_shader(char *filename,
   if (!buf) return RENDER_ERROR_MEMORY;
   fseek(f, 0, SEEK_SET);
   read = fread(buf, 1, (size_t) size, f);
-  if (read != (unsigned long) size) return RENDER_ERROR_FILE;
+  if (read != size) return RENDER_ERROR_FILE;
   *out = buf;
-  *out_len = (unsigned long) size;
+  *out_len = (size_t) size;
   fclose(f);
   return RENDER_ERROR_NONE;
 }
@@ -419,44 +418,31 @@ static enum render_error create_render_pass(struct render *r) {
      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
     0
   };
-  VkAttachmentDescription attachment = {
-    0,
-    r->format.format,
-    VK_SAMPLE_COUNT_1_BIT,
-    VK_ATTACHMENT_LOAD_OP_CLEAR,
-    VK_ATTACHMENT_STORE_OP_STORE,
-    VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-    VK_ATTACHMENT_STORE_OP_DONT_CARE,
-    VK_IMAGE_LAYOUT_UNDEFINED,
-    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-  };
+  VkAttachmentDescription attachment = { 0 };
   VkAttachmentReference attachment_ref = {
     0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
   };
-  VkSubpassDescription subpass = {
-    0,
-    VK_PIPELINE_BIND_POINT_GRAPHICS,
-    0,
-    NULL,
-    1,
-    &attachment_ref,
-    NULL,
-    NULL,
-    0,
-    NULL
-  };
-  VkRenderPassCreateInfo create_info = {
-    VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-    NULL,
-    0,
-    1,
-    &attachment,
-    1,
-    &subpass,
-    1,
-    &dependency
-  };
+  VkSubpassDescription subpass = { 0 };
+  VkRenderPassCreateInfo create_info = { 0 };
 
+  attachment.format = r->format.format;
+  attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments = &attachment_ref;
+  create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  create_info.attachmentCount = 1;
+  create_info.pAttachments = &attachment;
+  create_info.subpassCount = 1;
+  create_info.pSubpasses = &subpass;
+  create_info.dependencyCount = 1;
+  create_info.pDependencies = &dependency;
   result = r->vkCreateRenderPass(r->device,
                                  &create_info,
                                  NULL,
@@ -479,116 +465,26 @@ static enum render_error create_pipeline(struct render *r,
     { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 },
     { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3 }
   };
-  VkPipelineVertexInputStateCreateInfo vertex_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-    NULL,
-    0,
-    1,
-    bindings,
-    sizeof(attrs) / sizeof(attrs[0]),
-    attrs
-  };
+  VkPipelineVertexInputStateCreateInfo vertex_info = { 0 };
 
-  VkPipelineInputAssemblyStateCreateInfo assembly_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-    NULL,
-    0,
-    VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-    VK_FALSE
-  };
+  VkPipelineInputAssemblyStateCreateInfo assembly_info = { 0 };
 
-  VkViewport viewport = {
-    0.0f,
-    0.0f,
-    (float) r->swap_extent.width,
-    (float) r->swap_extent.height,
-    0.0f,
-    1.0f
-  };
-  VkRect2D scissor = {
-    0,
-    0,
-    r->swap_extent.width,
-    r->swap_extent.height
-  };
-  VkPipelineViewportStateCreateInfo viewport_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-    NULL,
-    0,
-    1,
-    &viewport,
-    1,
-    &scissor
-  };
+  VkViewport viewport = { 0 };
+  VkRect2D scissor = { 0 };
 
-  VkPipelineRasterizationStateCreateInfo raster_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-    NULL,
-    0,
-    VK_FALSE,
-    VK_FALSE,
-    VK_POLYGON_MODE_FILL,
-    VK_CULL_MODE_BACK_BIT,
-    VK_FRONT_FACE_COUNTER_CLOCKWISE,
-    VK_FALSE,
-    0.0f,
-    0.0f
-  };
+  VkPipelineViewportStateCreateInfo viewport_info = { 0 };
 
-  VkPipelineMultisampleStateCreateInfo multisample_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-    NULL,
-    0,
-    VK_SAMPLE_COUNT_1_BIT,
-    VK_FALSE,
-    1.0f,
-    NULL,
-    VK_FALSE,
-    VK_FALSE
-  };
+  VkPipelineRasterizationStateCreateInfo raster_info = { 0 };
 
-  VkPipelineDepthStencilStateCreateInfo depth_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-    NULL,
-    0,
-    VK_TRUE,
-    VK_TRUE,
-    VK_COMPARE_OP_LESS,
-    VK_FALSE,
-    VK_FALSE
-  };
+  VkPipelineMultisampleStateCreateInfo multisample_info = { 0 };
 
-  VkPipelineColorBlendAttachmentState color_attachment = {
-    VK_FALSE,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    (VK_COLOR_COMPONENT_R_BIT |
-     VK_COLOR_COMPONENT_G_BIT |
-     VK_COLOR_COMPONENT_B_BIT)
-  };
+  VkPipelineDepthStencilStateCreateInfo depth_info = { 0 };
 
-  VkPipelineColorBlendStateCreateInfo color_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-    NULL,
-    0,
-    VK_FALSE,
-    0,
-    1,
-    &color_attachment,
-    0
-  };
+  VkPipelineColorBlendAttachmentState color_attachment = { 0 };
 
-  VkPipelineDynamicStateCreateInfo dynamic_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-    NULL,
-    0,
-    0,
-    NULL
-  };
+  VkPipelineColorBlendStateCreateInfo color_info = { 0 };
+
+  VkPipelineDynamicStateCreateInfo dynamic_info = { 0 };
 
   VkPipelineLayout layout;
 
@@ -596,10 +492,12 @@ static enum render_error create_pipeline(struct render *r,
 
   VkResult result;
 
-  chkerr(read_shader(vshader, &vert_shader, &vlen));
-  chkerr(read_shader(fshader, &frag_shader, &flen));
-  chkerr(create_shader(r, vert_shader, vlen, &r->vert_module));
-  chkerr(create_shader(r, frag_shader, flen, &r->frag_module));
+  chkerrt(enum render_error, read_shader(vshader, &vert_shader, &vlen));
+  chkerrt(enum render_error, read_shader(fshader, &frag_shader, &flen));
+  chkerrt(enum render_error,
+          create_shader(r, vert_shader, vlen, &r->vert_module));
+  chkerrt(enum render_error,
+          create_shader(r, frag_shader, flen, &r->frag_module));
   free(vert_shader);
   free(frag_shader);
   shader_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -611,8 +509,77 @@ static enum render_error create_pipeline(struct render *r,
   shader_info[1].module = r->frag_module;
   shader_info[1].pName = "main";
 
-  chkerr(create_pipeline_layout(r, &layout));
-  chkerr(create_render_pass(r));
+  vertex_info.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertex_info.vertexBindingDescriptionCount = 1;
+  vertex_info.pVertexBindingDescriptions = bindings;
+  vertex_info.vertexAttributeDescriptionCount =
+    sizeof(attrs) / sizeof(attrs[0]);
+  vertex_info.pVertexAttributeDescriptions = attrs;
+
+  assembly_info.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  assembly_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  assembly_info.primitiveRestartEnable = VK_FALSE;
+
+  viewport.x = 0.0f;
+  viewport.y = 0.0f;
+  viewport.width = (float) r->swap_extent.width;
+  viewport.height = (float) r->swap_extent.height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+
+  scissor.offset.x = 0;
+  scissor.offset.y = 0;
+  scissor.extent.width = r->swap_extent.width;
+  scissor.extent.height = r->swap_extent.height;
+
+  viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport_info.viewportCount = 1;
+  viewport_info.pViewports = &viewport;
+  viewport_info.scissorCount = 1;
+  viewport_info.pScissors = &scissor;
+
+  raster_info.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  raster_info.depthClampEnable = VK_FALSE;
+  raster_info.rasterizerDiscardEnable = VK_FALSE;
+  raster_info.polygonMode = VK_POLYGON_MODE_FILL;
+  raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
+  raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  raster_info.depthBiasEnable = VK_FALSE;
+
+  multisample_info.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  multisample_info.sampleShadingEnable = VK_FALSE;
+  multisample_info.minSampleShading = 1.0f;
+  multisample_info.pSampleMask = NULL;
+  multisample_info.alphaToCoverageEnable = VK_FALSE;
+  multisample_info.alphaToOneEnable = VK_FALSE;
+
+  depth_info.sType =
+    VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth_info.depthTestEnable = VK_TRUE;
+  depth_info.depthWriteEnable = VK_TRUE;
+  depth_info.depthBoundsTestEnable = VK_FALSE;
+  depth_info.stencilTestEnable = VK_FALSE;
+
+  color_attachment.blendEnable = VK_FALSE;
+  color_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
+                                  | VK_COLOR_COMPONENT_G_BIT
+                                  | VK_COLOR_COMPONENT_B_BIT;
+
+  color_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  color_info.logicOpEnable = VK_FALSE;
+  color_info.attachmentCount = 1;
+  color_info.pAttachments = &color_attachment;
+
+  dynamic_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic_info.dynamicStateCount = 0;
+
+  chkerrt(enum render_error, create_pipeline_layout(r, &layout));
+  chkerrt(enum render_error, create_render_pass(r));
 
   graphics_pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   graphics_pipeline.stageCount = sizeof(shader_info) / sizeof(shader_info[0]);
@@ -673,7 +640,7 @@ static enum render_error create_framebuffers(struct render *r) {
   if (!r->image_views) return RENDER_ERROR_MEMORY;
   for (i = 0; i < r->n_swapchain_images; ++i) {
     /* &r->image_views[i] */
-    chkerr(create_image_view(r, i, r->image_views + i));
+    chkerrt(enum render_error, create_image_view(r, i, r->image_views + i));
   }
   r->framebuffers = malloc(sizeof(VkFramebuffer) * r->n_swapchain_images);
   if (!r->framebuffers) return RENDER_ERROR_MEMORY;
@@ -705,7 +672,7 @@ static enum render_error create_command_pool(struct render *r) {
   VkResult result;
 
   create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  create_info.queueFamilyIndex = r->queue_index_graphics;
+  create_info.queueFamilyIndex = (uint32_t) r->queue_index_graphics;
   result = r->vkCreateCommandPool(r->device,
                                   &create_info,
                                   NULL,
@@ -723,7 +690,7 @@ static enum render_error create_command_buffers(struct render *r) {
   allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   allocate_info.commandPool = r->command_pool;
   allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocate_info.commandBufferCount = r->n_swapchain_images;
+  allocate_info.commandBufferCount = (uint32_t) r->n_swapchain_images;
   result = r->vkAllocateCommandBuffers(r->device,
                                        &allocate_info,
                                        r->command_buffers);
@@ -819,24 +786,30 @@ static enum render_error create_vertex_data(struct render *r) {
   };
   uint16_t indices[] = { 0, 1, 2, 2, 3, 0 };
 
-  chkerr(create_buffer(r,
-                       &r->vertex_buffer,
-                       size_verts,
-                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
-  chkerr(create_buffer(r,
-                       &r->index_buffer,
-                       size_indices,
-                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
-  chkerr(allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
-  chkerr(allocate_buffer(r, &r->index_buffer, &r->index_memory));
-  chkerr(write_data(r,
-                    &r->vertex_memory,
-                    vertices,
-                    size_verts));
-  chkerr(write_data(r,
-                    &r->index_memory,
-                    indices,
-                    size_indices));
+  chkerrt(enum render_error,
+          create_buffer(r,
+                        &r->vertex_buffer,
+                        size_verts,
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
+  chkerrt(enum render_error,
+          create_buffer(r,
+                        &r->index_buffer,
+                        size_indices,
+                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+  chkerrt(enum render_error,
+          allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
+  chkerrt(enum render_error,
+          allocate_buffer(r, &r->index_buffer, &r->index_memory));
+  chkerrt(enum render_error,
+          write_data(r,
+                     &r->vertex_memory,
+                     vertices,
+                     size_verts));
+  chkerrt(enum render_error,
+          write_data(r,
+                     &r->index_memory,
+                     indices,
+                     size_indices));
   return RENDER_ERROR_NONE;
 }
 
@@ -849,7 +822,7 @@ static enum render_error write_buffers(struct render *r) {
   begin_info.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
   for (i = 0; i < r->n_swapchain_images; ++i) {
     VkRenderPassBeginInfo render_info = { 0 };
-    VkClearValue clear_value = { 0 };
+    VkClearValue clear_value = { { { 0 } } };
 
     result = r->vkBeginCommandBuffer(r->command_buffers[i], &begin_info);
     if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN;
@@ -914,12 +887,12 @@ static enum render_error create_semaphores(struct render *r) {
 enum render_error render_init(struct render *r, struct window *w) {
   if (!r) return RENDER_ERROR_NULL;
   memset((unsigned char *) r, 0, sizeof(struct render));
-  chkerr(load_vulkan(r));
-  chkerr(load_preinstance_functions(r));
-  chkerr(create_instance(r));
-  chkerr(load_instance_functions(r));
-  chkerr(create_surface(r, w));
-  chkerr(get_devices(r));
+  chkerrt(enum render_error, load_vulkan(r));
+  chkerrt(enum render_error, load_preinstance_functions(r));
+  chkerrt(enum render_error, create_instance(r));
+  chkerrt(enum render_error, load_instance_functions(r));
+  chkerrt(enum render_error, create_surface(r, w));
+  chkerrt(enum render_error, get_devices(r));
   return RENDER_ERROR_NONE;
 }
 
@@ -944,19 +917,19 @@ enum render_error render_create_pipeline(struct render *r,
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = phys_id;
-  chkerr(get_queue_props(r));
-  chkerr(get_present_and_graphics_indices(r));
-  chkerr(create_device(r));
-  chkerr(load_device_functions(r));
-  chkerr(get_surface_format(r));
-  chkerr(create_swapchain(r));
-  chkerr(create_pipeline(r, vshader, fshader));
-  chkerr(create_framebuffers(r));
-  chkerr(create_command_pool(r));
-  chkerr(create_command_buffers(r));
-  chkerr(create_vertex_data(r));
-  chkerr(write_buffers(r));
-  chkerr(create_semaphores(r));
+  chkerrt(enum render_error, get_queue_props(r));
+  chkerrt(enum render_error, get_present_and_graphics_indices(r));
+  chkerrt(enum render_error, create_device(r));
+  chkerrt(enum render_error, load_device_functions(r));
+  chkerrt(enum render_error, get_surface_format(r));
+  chkerrt(enum render_error, create_swapchain(r));
+  chkerrt(enum render_error, create_pipeline(r, vshader, fshader));
+  chkerrt(enum render_error, create_framebuffers(r));
+  chkerrt(enum render_error, create_command_pool(r));
+  chkerrt(enum render_error, create_command_buffers(r));
+  chkerrt(enum render_error, create_vertex_data(r));
+  chkerrt(enum render_error, write_buffers(r));
+  chkerrt(enum render_error, create_semaphores(r));
   r->has_pipeline = 1;
   return RENDER_ERROR_NONE;
 }
@@ -974,7 +947,7 @@ void render_destroy_pipeline(struct render *r) {
     r->vkFreeMemory(r->device, r->index_memory, NULL);
     r->vkFreeCommandBuffers(r->device,
                             r->command_pool,
-                            r->n_swapchain_images,
+                            (uint32_t) r->n_swapchain_images,
                             r->command_buffers);
     free(r->command_buffers);
     r->vkDestroyCommandPool(r->device, r->command_pool, NULL);

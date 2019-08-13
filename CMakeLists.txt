@@ -4,3 +4,9 @@ add_library(render "./src/render.c")
 add_dependencies(render error window)
 target_include_directories(render PUBLIC "./src")
 target_link_libraries(render error window)
+target_compile_options(render
+  PUBLIC "-std=c90"
+  PUBLIC "-pedantic-errors"
+  PUBLIC "-Wall"
+  PUBLIC "-Wconversion"
+  )
