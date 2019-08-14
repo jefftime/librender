@@ -36,18 +36,18 @@ xcb_window_t window_xcb_window(struct window *w);
 #include <stdlib.h>
 #include <string.h>
 
-static enum render_error load_vulkan(struct render *r) {
+static int load_vulkan(struct render *r) {
   r->vklib = dlopen("libvulkan.so", RTLD_NOW);
-  if (!r->vklib) return RENDER_ERROR_VK_LOAD;
+  if (!r->vklib) return RENDER_ERROR_VULKAN_LOAD;
   r->vkGetInstanceProcAddr =
     (PFN_vkGetInstanceProcAddr) dlsym(r->vklib, "vkGetInstanceProcAddr");
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error load_preinstance_functions(struct render *r) {
+static int load_preinstance_functions(struct render *r) {
 #define load(f) \
   if (!(r->f = (PFN_##f) r->vkGetInstanceProcAddr(NULL, #f))) \
-    return RENDER_ERROR_VK_PREINST_LOAD;
+    return RENDER_ERROR_VULKAN_PREINST_LOAD;
 
   load(vkCreateInstance);
   return RENDER_ERROR_NONE;
@@ -55,7 +55,7 @@ static enum render_error load_preinstance_functions(struct render *r) {
 #undef load
 }
 
-static enum render_error create_instance(struct render *r) {
+static int create_instance(struct render *r) {
   char *extensions[] = {
     "VK_KHR_surface",
     "VK_KHR_xcb_surface"
@@ -67,11 +67,11 @@ static enum render_error create_instance(struct render *r) {
   create_info.enabledExtensionCount = 2;
   create_info.ppEnabledExtensionNames = (const char * const *) extensions;
   result = r->vkCreateInstance(&create_info, NULL, &r->instance);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_INSTANCE;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_INSTANCE;
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error load_instance_functions(struct render *r) {
+static int load_instance_functions(struct render *r) {
 #define load(f) \
   if (!(r->f = (PFN_##f) r->vkGetInstanceProcAddr(r->instance, #f))) \
     return RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD;
@@ -103,27 +103,27 @@ static enum render_error load_instance_functions(struct render *r) {
 #undef load
 }
 
-static enum render_error get_devices(struct render *r) {
+static int get_devices(struct render *r) {
   uint32_t n_devices;
   VkResult result;
 
   result = r->vkEnumeratePhysicalDevices(r->instance, &n_devices, NULL);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_PHYSICAL_DEVICE;
-  if (n_devices == 0) return RENDER_ERROR_VK_NO_DEVICES;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PHYSICAL_DEVICE;
+  if (n_devices == 0) return RENDER_ERROR_VULKAN_NO_DEVICES;
   r->n_devices = n_devices;
   r->phys_devices = malloc(sizeof(VkPhysicalDevice) * n_devices);
   if (!r->phys_devices) return RENDER_ERROR_MEMORY;
   result = r->vkEnumeratePhysicalDevices(r->instance,
                                          &n_devices,
                                          r->phys_devices);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_PHYSICAL_DEVICE;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PHYSICAL_DEVICE;
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error load_device_functions(struct render *r) {
+static int load_device_functions(struct render *r) {
 #define load(f) \
   if (!(r->f = (PFN_##f) r->vkGetDeviceProcAddr(r->device, #f))) \
-    return RENDER_ERROR_VK_DEVICE_FUNC_LOAD;
+    return RENDER_ERROR_VULKAN_DEVICE_FUNC_LOAD;
 
   load(vkCreateSwapchainKHR);
   load(vkCreateShaderModule);
@@ -166,7 +166,7 @@ static enum render_error load_device_functions(struct render *r) {
 #undef load
 }
 
-static enum render_error create_surface(struct render *r, struct window *w) {
+static int create_surface(struct render *r, struct window *w) {
   VkXcbSurfaceCreateInfoKHR create_info = { 0 };
   VkResult result;
 
@@ -177,16 +177,16 @@ static enum render_error create_surface(struct render *r, struct window *w) {
                                     &create_info,
                                     NULL,
                                     &r->surface);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_SURFACE;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE;
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error get_queue_props(struct render *r) {
+static int get_queue_props(struct render *r) {
   uint32_t n_props;
   r->vkGetPhysicalDeviceQueueFamilyProperties(r->phys_devices[r->phys_id],
                                               &n_props,
                                               NULL);
-  if (n_props == 0) return RENDER_ERROR_VK_QUEUE_INDICES;
+  if (n_props == 0) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
   r->n_queue_props = n_props;
   r->queue_props = malloc(sizeof(VkQueueFamilyProperties) * n_props);
   if (!r->queue_props) return RENDER_ERROR_MEMORY;
@@ -196,7 +196,7 @@ static enum render_error get_queue_props(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error get_present_and_graphics_indices(struct render *r) {
+static int get_present_and_graphics_indices(struct render *r) {
   int graphics_isset = 0;
   int present_isset = 0;
   size_t i;
@@ -215,7 +215,7 @@ static enum render_error get_present_and_graphics_indices(struct render *r) {
                                               (uint32_t) i,
                                               r->surface,
                                               &present_support);
-    if (result != VK_SUCCESS) return RENDER_ERROR_VK_QUEUE_INDICES;
+    if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
     if ((r->queue_props[i].queueCount > 0) && present_support) {
       present_isset = 1;
       r->queue_index_present = i;
@@ -224,7 +224,7 @@ static enum render_error get_present_and_graphics_indices(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_device(struct render *r) {
+static int create_device(struct render *r) {
   char *extensions[] = { "VK_KHR_swapchain" };
   float queue_priority = 1.0f;
   VkDeviceQueueCreateInfo queue_create_infos[] = { { 0 }, { 0 } };
@@ -233,7 +233,7 @@ static enum render_error create_device(struct render *r) {
 
   /* TODO: support separate graphics and present queues */
   if (r->queue_index_present != r->queue_index_graphics) {
-    return RENDER_ERROR_VK_QUEUE_INDEX_MISMATCH;
+    return RENDER_ERROR_VULKAN_QUEUE_INDEX_MISMATCH;
   }
   queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   queue_create_infos[0].queueFamilyIndex = (uint32_t) r->queue_index_graphics;
@@ -264,7 +264,7 @@ static enum render_error create_device(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error get_surface_format(struct render *r) {
+static int get_surface_format(struct render *r) {
   uint32_t n_formats;
   VkSurfaceFormatKHR *formats;
   VkResult result;
@@ -273,21 +273,21 @@ static enum render_error get_surface_format(struct render *r) {
                                                    r->surface,
                                                    &n_formats,
                                                    NULL);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_SURFACE_FORMAT;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
   if (!formats) return RENDER_ERROR_MEMORY;
   result = r->vkGetPhysicalDeviceSurfaceFormatsKHR(r->phys_devices[r->phys_id],
                                                    r->surface,
                                                    &n_formats,
                                                    formats);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_SURFACE_FORMAT;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   r->format = formats[0];
   free(formats);
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error get_surface_caps(struct render *r,
-                                          VkSurfaceCapabilitiesKHR *out_caps) {
+static int get_surface_caps(struct render *r,
+                            VkSurfaceCapabilitiesKHR *out_caps) {
   VkSurfaceCapabilitiesKHR caps = { 0 };
   VkResult result;
 
@@ -295,12 +295,12 @@ static enum render_error get_surface_caps(struct render *r,
     r->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->phys_devices[r->phys_id],
                                                  r->surface,
                                                  &caps);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_SURFACE_CAPABILITIES;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES;
   *out_caps = caps;
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error get_swapchain_images(struct render *r) {
+static int get_swapchain_images(struct render *r) {
   uint32_t n_images;
   VkResult result;
 
@@ -320,12 +320,12 @@ static enum render_error get_swapchain_images(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_swapchain(struct render *r) {
+static int create_swapchain(struct render *r) {
   VkSwapchainCreateInfoKHR create_info = { 0 };
   VkSurfaceCapabilitiesKHR caps;
   VkResult result;
 
-  chkerrt(enum render_error, get_surface_caps(r, &caps));
+  chkerr(get_surface_caps(r, &caps));
   create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   create_info.surface = r->surface;
   create_info.minImageCount = 2;
@@ -343,15 +343,15 @@ static enum render_error create_swapchain(struct render *r) {
                                    &create_info,
                                    NULL,
                                    &r->swapchain);
-  if (result != VK_SUCCESS) return RENDER_ERROR_VK_SWAPCHAIN;
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN;
   r->swap_extent = caps.currentExtent;
-  chkerrt(enum render_error, get_swapchain_images(r));
+  chkerr(get_swapchain_images(r));
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error read_shader(char *filename,
-                                     unsigned char **out,
-                                     size_t *out_len) {
+static int read_shader(char *filename,
+                       unsigned char **out,
+                       size_t *out_len) {
   unsigned char *buf;
   long size;
   size_t read;
@@ -361,7 +361,7 @@ static enum render_error read_shader(char *filename,
   if (!f) return RENDER_ERROR_FILE;
   fseek(f, 0, SEEK_END);
   size = ftell(f);
-  if (size % 4) puts("not a multiple of 4");
+  if (size % 4) return RENDER_ERROR_VULKAN_SHADER_READ;
   buf = malloc((size_t) size);
   if (!buf) return RENDER_ERROR_MEMORY;
   fseek(f, 0, SEEK_SET);
@@ -373,10 +373,10 @@ static enum render_error read_shader(char *filename,
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_shader(struct render *r,
-                                       unsigned char *source,
-                                       size_t len,
-                                       VkShaderModule *out_module) {
+static int create_shader(struct render *r,
+                         unsigned char *source,
+                         size_t len,
+                         VkShaderModule *out_module) {
   VkShaderModuleCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -391,8 +391,8 @@ static enum render_error create_shader(struct render *r,
   return 0;
 }
 
-static enum render_error create_pipeline_layout(struct render *r,
-                                                VkPipelineLayout *out_layout) {
+static int create_pipeline_layout(struct render *r,
+                                  VkPipelineLayout *out_layout) {
   VkResult result;
   VkPipelineLayoutCreateInfo create_info = {
     VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
@@ -406,7 +406,7 @@ static enum render_error create_pipeline_layout(struct render *r,
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_render_pass(struct render *r) {
+static int create_render_pass(struct render *r) {
   VkResult result;
   VkSubpassDependency dependency = {
     VK_SUBPASS_EXTERNAL,
@@ -451,9 +451,9 @@ static enum render_error create_render_pass(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_pipeline(struct render *r,
-                                         char *vshader,
-                                         char *fshader) {
+static int create_pipeline(struct render *r,
+                           char *vshader,
+                           char *fshader) {
   unsigned char *vert_shader, *frag_shader;
   size_t vlen, flen;
   VkPipelineShaderStageCreateInfo shader_info[] = { { 0 }, { 0 } };
@@ -492,12 +492,10 @@ static enum render_error create_pipeline(struct render *r,
 
   VkResult result;
 
-  chkerrt(enum render_error, read_shader(vshader, &vert_shader, &vlen));
-  chkerrt(enum render_error, read_shader(fshader, &frag_shader, &flen));
-  chkerrt(enum render_error,
-          create_shader(r, vert_shader, vlen, &r->vert_module));
-  chkerrt(enum render_error,
-          create_shader(r, frag_shader, flen, &r->frag_module));
+  chkerr(read_shader(vshader, &vert_shader, &vlen));
+  chkerr(read_shader(fshader, &frag_shader, &flen));
+  chkerr(create_shader(r, vert_shader, vlen, &r->vert_module));
+  chkerr(create_shader(r, frag_shader, flen, &r->frag_module));
   free(vert_shader);
   free(frag_shader);
   shader_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -578,8 +576,8 @@ static enum render_error create_pipeline(struct render *r,
   dynamic_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic_info.dynamicStateCount = 0;
 
-  chkerrt(enum render_error, create_pipeline_layout(r, &layout));
-  chkerrt(enum render_error, create_render_pass(r));
+  chkerr(create_pipeline_layout(r, &layout));
+  chkerr(create_render_pass(r));
 
   graphics_pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   graphics_pipeline.stageCount = sizeof(shader_info) / sizeof(shader_info[0]);
@@ -609,9 +607,9 @@ static enum render_error create_pipeline(struct render *r,
   return 0;
 }
 
-static enum render_error create_image_view(struct render *r,
-                                    size_t swapchain_index,
-                                    VkImageView *out_view) {
+static int create_image_view(struct render *r,
+                             size_t swapchain_index,
+                             VkImageView *out_view) {
   VkImageViewCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -633,14 +631,14 @@ static enum render_error create_image_view(struct render *r,
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_framebuffers(struct render *r) {
+static int create_framebuffers(struct render *r) {
   size_t i;
 
   r->image_views = malloc(sizeof(VkImageView) * r->n_swapchain_images);
   if (!r->image_views) return RENDER_ERROR_MEMORY;
   for (i = 0; i < r->n_swapchain_images; ++i) {
     /* &r->image_views[i] */
-    chkerrt(enum render_error, create_image_view(r, i, r->image_views + i));
+    chkerr(create_image_view(r, i, r->image_views + i));
   }
   r->framebuffers = malloc(sizeof(VkFramebuffer) * r->n_swapchain_images);
   if (!r->framebuffers) return RENDER_ERROR_MEMORY;
@@ -667,7 +665,7 @@ static enum render_error create_framebuffers(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_command_pool(struct render *r) {
+static int create_command_pool(struct render *r) {
   VkCommandPoolCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -681,7 +679,7 @@ static enum render_error create_command_pool(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_command_buffers(struct render *r) {
+static int create_command_buffers(struct render *r) {
   VkCommandBufferAllocateInfo allocate_info = { 0 };
   VkResult result;
 
@@ -698,10 +696,10 @@ static enum render_error create_command_buffers(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_buffer(struct render *r,
-                                       VkBuffer *out_buf,
-                                       size_t size,
-                                       VkBufferUsageFlags flags) {
+static int create_buffer(struct render *r,
+                         VkBuffer *out_buf,
+                         size_t size,
+                         VkBufferUsageFlags flags) {
   VkBufferCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -728,10 +726,10 @@ static uint32_t get_heap_index(struct render *r, VkMemoryPropertyFlags flags) {
   return index;
 }
 
-static enum render_error write_data(struct render *r,
-                                    VkDeviceMemory *mem,
-                                    void *data,
-                                    size_t size) {
+static int write_data(struct render *r,
+                      VkDeviceMemory *mem,
+                      void *data,
+                      size_t size) {
   void *dst;
   VkMappedMemoryRange range = { 0 };
   VkResult result;
@@ -756,9 +754,9 @@ static enum render_error write_data(struct render *r,
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error allocate_buffer(struct render *r,
-                                         VkBuffer *buf,
-                                         VkDeviceMemory *mem) {
+static int allocate_buffer(struct render *r,
+                           VkBuffer *buf,
+                           VkDeviceMemory *mem) {
   VkMemoryRequirements reqs;
   VkMemoryAllocateInfo allocate_info = { 0 };
   VkResult result;
@@ -775,7 +773,7 @@ static enum render_error allocate_buffer(struct render *r,
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_vertex_data(struct render *r) {
+static int create_vertex_data(struct render *r) {
   size_t size_verts = sizeof(float) * 6 * 4;
   size_t size_indices = sizeof(uint16_t) * 3 * 2;
   float vertices[] = {
@@ -786,34 +784,22 @@ static enum render_error create_vertex_data(struct render *r) {
   };
   uint16_t indices[] = { 0, 1, 2, 2, 3, 0 };
 
-  chkerrt(enum render_error,
-          create_buffer(r,
-                        &r->vertex_buffer,
-                        size_verts,
-                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
-  chkerrt(enum render_error,
-          create_buffer(r,
-                        &r->index_buffer,
-                        size_indices,
-                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
-  chkerrt(enum render_error,
-          allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
-  chkerrt(enum render_error,
-          allocate_buffer(r, &r->index_buffer, &r->index_memory));
-  chkerrt(enum render_error,
-          write_data(r,
-                     &r->vertex_memory,
-                     vertices,
-                     size_verts));
-  chkerrt(enum render_error,
-          write_data(r,
-                     &r->index_memory,
-                     indices,
-                     size_indices));
+  chkerr(create_buffer(r,
+                       &r->vertex_buffer,
+                       size_verts,
+                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
+  chkerr(create_buffer(r,
+                       &r->index_buffer,
+                       size_indices,
+                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+  chkerr(allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
+  chkerr(allocate_buffer(r, &r->index_buffer, &r->index_memory));
+  chkerr(write_data(r, &r->vertex_memory, vertices, size_verts));
+  chkerr(write_data(r, &r->index_memory, indices, size_indices));
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error write_buffers(struct render *r) {
+static int write_buffers(struct render *r) {
   size_t i;
   VkCommandBufferBeginInfo begin_info = { 0 };
   VkResult result;
@@ -862,7 +848,7 @@ static enum render_error write_buffers(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static enum render_error create_semaphores(struct render *r) {
+static int create_semaphores(struct render *r) {
   VkSemaphoreCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -884,15 +870,15 @@ static enum render_error create_semaphores(struct render *r) {
 /* Public */
 /* **************************************** */
 
-enum render_error render_init(struct render *r, struct window *w) {
+int render_init(struct render *r, struct window *w) {
   if (!r) return RENDER_ERROR_NULL;
   memset((unsigned char *) r, 0, sizeof(struct render));
-  chkerrt(enum render_error, load_vulkan(r));
-  chkerrt(enum render_error, load_preinstance_functions(r));
-  chkerrt(enum render_error, create_instance(r));
-  chkerrt(enum render_error, load_instance_functions(r));
-  chkerrt(enum render_error, create_surface(r, w));
-  chkerrt(enum render_error, get_devices(r));
+  chkerr(load_vulkan(r));
+  chkerr(load_preinstance_functions(r));
+  chkerr(create_instance(r));
+  chkerr(load_instance_functions(r));
+  chkerr(create_surface(r, w));
+  chkerr(get_devices(r));
   return RENDER_ERROR_NONE;
 }
 
@@ -908,28 +894,28 @@ void render_deinit(struct render *r) {
   memset((unsigned char *) r, 0, sizeof(struct render));
 }
 
-enum render_error render_create_pipeline(struct render *r,
-                                         unsigned int width, 
-                                         unsigned int height,
-                                         size_t phys_id,
-                                         char *vshader,
-                                         char *fshader) {
+int render_create_pipeline(struct render *r,
+                           unsigned int width,
+                           unsigned int height,
+                           size_t phys_id,
+                           char *vshader,
+                           char *fshader) {
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = phys_id;
-  chkerrt(enum render_error, get_queue_props(r));
-  chkerrt(enum render_error, get_present_and_graphics_indices(r));
-  chkerrt(enum render_error, create_device(r));
-  chkerrt(enum render_error, load_device_functions(r));
-  chkerrt(enum render_error, get_surface_format(r));
-  chkerrt(enum render_error, create_swapchain(r));
-  chkerrt(enum render_error, create_pipeline(r, vshader, fshader));
-  chkerrt(enum render_error, create_framebuffers(r));
-  chkerrt(enum render_error, create_command_pool(r));
-  chkerrt(enum render_error, create_command_buffers(r));
-  chkerrt(enum render_error, create_vertex_data(r));
-  chkerrt(enum render_error, write_buffers(r));
-  chkerrt(enum render_error, create_semaphores(r));
+  chkerr(get_queue_props(r));
+  chkerr(get_present_and_graphics_indices(r));
+  chkerr(create_device(r));
+  chkerr(load_device_functions(r));
+  chkerr(get_surface_format(r));
+  chkerr(create_swapchain(r));
+  chkerr(create_pipeline(r, vshader, fshader));
+  chkerr(create_framebuffers(r));
+  chkerr(create_command_pool(r));
+  chkerr(create_command_buffers(r));
+  chkerr(create_vertex_data(r));
+  chkerr(write_buffers(r));
+  chkerr(create_semaphores(r));
   r->has_pipeline = 1;
   return RENDER_ERROR_NONE;
 }
@@ -963,11 +949,11 @@ void render_destroy_pipeline(struct render *r) {
     r->vkDestroyPipeline(r->device, r->pipeline, NULL);
     r->vkDestroyRenderPass(r->device, r->render_pass, NULL);
     free(r->queue_props);
+    r->has_pipeline = 0;
   }
-  r->has_pipeline = 0;
 }
 
-enum render_error render_update(struct render *r) {
+int render_update(struct render *r) {
   uint32_t image_index;
   VkSubmitInfo submit_info = { 0 };
   VkPipelineStageFlags wait_stages[] = {

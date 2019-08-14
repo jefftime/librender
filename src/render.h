@@ -32,46 +32,46 @@ typedef uint32_t xcb_visualid_t;
 
 #endif /* TARGET_OS_LINUX */
 
+/* libwindow */
 struct window;
 
-enum render_error {
-  RENDER_ERROR_NONE = 0,
-  RENDER_ERROR_MEMORY,
-  RENDER_ERROR_FILE,
-  RENDER_ERROR_NULL,
-  RENDER_ERROR_VK_LOAD,
-  RENDER_ERROR_VK_INSTANCE,
-  RENDER_ERROR_VK_PREINST_LOAD,
-  RENDER_ERROR_VK_INST_LOAD,
-  RENDER_ERROR_VK_PHYSICAL_DEVICE,
-  RENDER_ERROR_VK_NO_DEVICES,
-  RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD,
-  RENDER_ERROR_VK_DEVICE_FUNC_LOAD,
-  RENDER_ERROR_VK_SURFACE,
-  RENDER_ERROR_VK_QUEUE_INDICES,
-  RENDER_ERROR_VK_QUEUE_INDEX_MISMATCH,
-  RENDER_ERROR_VULKAN_CREATE_DEVICE,
-  RENDER_ERROR_VK_SURFACE_FORMAT,
-  RENDER_ERROR_VK_SURFACE_CAPABILITIES,
-  RENDER_ERROR_VK_SWAPCHAIN,
-  RENDER_ERROR_VULKAN_SHADER_MODULE,
-  RENDER_ERROR_VULKAN_PIPELINE_LAYOUT,
-  RENDER_ERROR_VULKAN_RENDER_PASS,
-  RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES,
-  RENDER_ERROR_VULKAN_IMAGE_VIEW,
-  RENDER_ERROR_VULKAN_FRAMEBUFFER,
-  RENDER_ERROR_VULKAN_COMMAND_POOL,
-  RENDER_ERROR_VULKAN_COMMAND_BUFFER,
-  RENDER_ERROR_VULKAN_BUFFER,
-  RENDER_ERROR_VULKAN_MEMORY,
-  RENDER_ERROR_VULKAN_MEMORY_MAP,
-  RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN,
-  RENDER_ERROR_VULKAN_COMMAND_BUFFER_END,
-  RENDER_ERROR_VULKAN_SEMAPHORE,
-  RENDER_ERROR_VULKAN_ACQUIRE_IMAGE,
-  RENDER_ERROR_VULKAN_QUEUE_SUBMIT,
-  RENDER_ERROR_VULKAN_QUEUE_PRESENT
-};
+#define RENDER_ERROR_NONE                         0
+#define RENDER_ERROR_MEMORY                      -1
+#define RENDER_ERROR_FILE                        -2
+#define RENDER_ERROR_NULL                        -3
+#define RENDER_ERROR_VULKAN_LOAD                 -4
+#define RENDER_ERROR_VULKAN_INSTANCE             -5
+#define RENDER_ERROR_VULKAN_PREINST_LOAD         -6
+#define RENDER_ERROR_VULKAN_INST_LOAD            -7
+#define RENDER_ERROR_VULKAN_PHYSICAL_DEVICE      -8
+#define RENDER_ERROR_VULKAN_NO_DEVICES           -9
+#define RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD   -10
+#define RENDER_ERROR_VULKAN_DEVICE_FUNC_LOAD     -11
+#define RENDER_ERROR_VULKAN_SURFACE              -12
+#define RENDER_ERROR_VULKAN_QUEUE_INDICES        -13
+#define RENDER_ERROR_VULKAN_QUEUE_INDEX_MISMATCH -14
+#define RENDER_ERROR_VULKAN_CREATE_DEVICE        -15
+#define RENDER_ERROR_VULKAN_SURFACE_FORMAT       -16
+#define RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES -17
+#define RENDER_ERROR_VULKAN_SWAPCHAIN            -18
+#define RENDER_ERROR_VULKAN_SHADER_MODULE        -19
+#define RENDER_ERROR_VULKAN_SHADER_READ          -20
+#define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT      -21
+#define RENDER_ERROR_VULKAN_RENDER_PASS          -22
+#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES     -23
+#define RENDER_ERROR_VULKAN_IMAGE_VIEW           -24
+#define RENDER_ERROR_VULKAN_FRAMEBUFFER          -25
+#define RENDER_ERROR_VULKAN_COMMAND_POOL         -26
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER       -27
+#define RENDER_ERROR_VULKAN_BUFFER               -28
+#define RENDER_ERROR_VULKAN_MEMORY               -29
+#define RENDER_ERROR_VULKAN_MEMORY_MAP           -30
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN -31
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END   -32
+#define RENDER_ERROR_VULKAN_SEMAPHORE            -33
+#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE        -34
+#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT         -35
+#define RENDER_ERROR_VULKAN_QUEUE_PRESENT        -36
 
 /* Easily get vulkan function definitions */
 #define vkfunc(f) PFN_##f f
@@ -183,16 +183,16 @@ struct render {
 
 /* **************************************** */
 /* render.c */
-enum render_error render_init(struct render *r, struct window *w);
+int render_init(struct render *r, struct window *w);
 void render_deinit(struct render *r);
-enum render_error render_create_pipeline(struct render *r,
-                                         unsigned int width,
-                                         unsigned int height,
-                                         size_t phys_id,
-                                         char *vshader,
-                                         char *fshader);
+int render_create_pipeline(struct render *r,
+                           unsigned int width,
+                           unsigned int height,
+                           size_t phys_id,
+                           char *vshader,
+                           char *fshader);
 void render_destroy_pipeline(struct render *r);
-enum render_error render_update(struct render *r);
+int render_update(struct render *r);
 /* **************************************** */
 
 #endif
