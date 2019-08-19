@@ -39,8 +39,9 @@ xcb_window_t window_xcb_window(struct window *w);
 static int load_vulkan(struct render *r) {
   r->vklib = dlopen("libvulkan.so", RTLD_NOW);
   if (!r->vklib) return RENDER_ERROR_VULKAN_LOAD;
-  r->vkGetInstanceProcAddr =
-    (PFN_vkGetInstanceProcAddr) dlsym(r->vklib, "vkGetInstanceProcAddr");
+  /* This gets around the -pedantic error */
+  *(PFN_vkGetInstanceProcAddr **) (&r->vkGetInstanceProcAddr) =
+    dlsym(r->vklib, "vkGetInstanceProcAddr");
   return RENDER_ERROR_NONE;
 }
 
@@ -602,6 +603,7 @@ static int create_pipeline(struct render *r,
                                         &graphics_pipeline,
                                         NULL,
                                         &r->pipeline);
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_PIPELINE;
   r->vkDestroyPipelineLayout(r->device, layout, NULL);
 
   return 0;
@@ -894,15 +896,15 @@ void render_deinit(struct render *r) {
   memset((unsigned char *) r, 0, sizeof(struct render));
 }
 
-int render_create_pipeline(struct render *r,
-                           unsigned int width,
-                           unsigned int height,
-                           size_t phys_id,
-                           char *vshader,
-                           char *fshader) {
+int render_configure(struct render *r,
+                     unsigned int width,
+                     unsigned int height,
+                     char *vshader,
+                     char *fshader) {
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
-  r->phys_id = phys_id;
+  r->phys_id = 0;
+  /* r->phys_id = phys_id; */
   chkerr(get_queue_props(r));
   chkerr(get_present_and_graphics_indices(r));
   chkerr(create_device(r));

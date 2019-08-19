@@ -57,21 +57,22 @@ struct window;
 #define RENDER_ERROR_VULKAN_SHADER_MODULE        -19
 #define RENDER_ERROR_VULKAN_SHADER_READ          -20
 #define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT      -21
-#define RENDER_ERROR_VULKAN_RENDER_PASS          -22
-#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES     -23
-#define RENDER_ERROR_VULKAN_IMAGE_VIEW           -24
-#define RENDER_ERROR_VULKAN_FRAMEBUFFER          -25
-#define RENDER_ERROR_VULKAN_COMMAND_POOL         -26
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER       -27
-#define RENDER_ERROR_VULKAN_BUFFER               -28
-#define RENDER_ERROR_VULKAN_MEMORY               -29
-#define RENDER_ERROR_VULKAN_MEMORY_MAP           -30
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN -31
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END   -32
-#define RENDER_ERROR_VULKAN_SEMAPHORE            -33
-#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE        -34
-#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT         -35
-#define RENDER_ERROR_VULKAN_QUEUE_PRESENT        -36
+#define RENDER_ERROR_VULKAN_CREATE_PIPELINE      -22
+#define RENDER_ERROR_VULKAN_RENDER_PASS          -23
+#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES     -24
+#define RENDER_ERROR_VULKAN_IMAGE_VIEW           -25
+#define RENDER_ERROR_VULKAN_FRAMEBUFFER          -26
+#define RENDER_ERROR_VULKAN_COMMAND_POOL         -27
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER       -28
+#define RENDER_ERROR_VULKAN_BUFFER               -29
+#define RENDER_ERROR_VULKAN_MEMORY               -30
+#define RENDER_ERROR_VULKAN_MEMORY_MAP           -31
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN -32
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END   -33
+#define RENDER_ERROR_VULKAN_SEMAPHORE            -34
+#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE        -35
+#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT         -36
+#define RENDER_ERROR_VULKAN_QUEUE_PRESENT        -37
 
 /* Easily get vulkan function definitions */
 #define vkfunc(f) PFN_##f f
@@ -185,12 +186,11 @@ struct render {
 /* render.c */
 int render_init(struct render *r, struct window *w);
 void render_deinit(struct render *r);
-int render_create_pipeline(struct render *r,
-                           unsigned int width,
-                           unsigned int height,
-                           size_t phys_id,
-                           char *vshader,
-                           char *fshader);
+int render_configure(struct render *r,
+                     unsigned int width,
+                     unsigned int height,
+                     char *vshader,
+                     char *fshader);
 void render_destroy_pipeline(struct render *r);
 int render_update(struct render *r);
 /* **************************************** */
