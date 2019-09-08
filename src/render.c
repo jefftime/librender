@@ -99,7 +99,6 @@ static int load_instance_functions(struct render *r) {
   load(vkDestroyFramebuffer);
   load(vkDestroyCommandPool);
   load(vkFreeCommandBuffers);
-  load(vkGetPhysicalDeviceFormatProperties);
   return RENDER_ERROR_NONE;
 
 #undef load
@@ -185,37 +184,6 @@ static int create_surface(struct render *r, struct window *w) {
   return RENDER_ERROR_NONE;
 }
 
-static int verify_format_properties(
-  struct render *r,
-  VkFormat fmt,
-  VkFormatFeatureFlagBits linear_tiling_flags,
-  VkFormatFeatureFlagBits opt_tiling_flags,
-  VkFormatFeatureFlagBits buffer_flags)
-{
-  VkFormatProperties props;
-
-  r->vkGetPhysicalDeviceFormatProperties(
-    r->phys_devices[r->phys_id],
-    fmt,
-    &props);
-  if (linear_tiling_flags) {
-    if (!(props.linearTilingFeatures & linear_tiling_flags)) {
-      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_LINEAR;
-    }
-  }
-  if (opt_tiling_flags) {
-    if (!(props.optimalTilingFeatures & opt_tiling_flags)) {
-      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_OPTIMAL;
-    }
-  }
-  if (buffer_flags) {
-    if (!(props.bufferFeatures & buffer_flags)) {
-      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_BUFFER;
-    }
-  }
-  return RENDER_ERROR_NONE;
-}
-
 static int get_queue_props(struct render *r) {
   uint32_t n_props;
 
@@ -272,17 +240,18 @@ static int create_device(struct render *r) {
   VkResult result;
 
   /* TODO: support separate graphics and present queues */
+  /* currently this is out of spec */
   if (r->queue_index_present != r->queue_index_graphics) {
     return RENDER_ERROR_VULKAN_QUEUE_INDEX_MISMATCH;
   }
   queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   queue_create_infos[0].queueFamilyIndex = (uint32_t) r->queue_index_graphics;
-  queue_create_infos[0].queueCount = 1;
+  queue_create_infos[0].queueCount = 2;
   queue_create_infos[0].pQueuePriorities = &queue_priority;
-  /* queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO; */
-  /* queue_create_infos[1].queueFamilyIndex = (uint32_t) r->queue_index_present; */
-  /* queue_create_infos[1].queueCount = 1; */
-  /* queue_create_infos[1].pQueuePriorities = &queue_priority; */
+  queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_create_infos[1].queueFamilyIndex = (uint32_t) r->queue_index_present;
+  queue_create_infos[1].queueCount = 1;
+  queue_create_infos[1].pQueuePriorities = &queue_priority;
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   create_info.queueCreateInfoCount = 1;
   create_info.pQueueCreateInfos = queue_create_infos;
@@ -387,7 +356,7 @@ static int create_swapchain(struct render *r) {
   create_info.imageColorSpace = r->format.colorSpace;
   create_info.imageExtent = caps.currentExtent;
   create_info.imageArrayLayers = 1;
-  create_info.imageUsage = caps.supportedUsageFlags;
+  create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
   create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   create_info.preTransform = caps.currentTransform;
   create_info.compositeAlpha = caps.supportedCompositeAlpha;
@@ -404,7 +373,7 @@ static int create_swapchain(struct render *r) {
   return RENDER_ERROR_NONE;
 }
 
-static int read_shader(char *filename, unsigned char **out, size_t *out_len) {
+static int read_shader(char *filename, size_t *out_len, unsigned char **out) {
   unsigned char *buf;
   long size;
   size_t read;
@@ -551,8 +520,8 @@ static int create_pipeline(struct render *r, char *vshader, char *fshader) {
 
   VkResult result;
 
-  chkerr(read_shader(vshader, &vert_shader, &vlen));
-  chkerr(read_shader(fshader, &frag_shader, &flen));
+  chkerr(read_shader(vshader, &vlen, &vert_shader));
+  chkerr(read_shader(fshader, &flen, &frag_shader));
   chkerr(create_shader(r, vert_shader, vlen, &r->vert_module));
   chkerr(create_shader(r, frag_shader, flen, &r->frag_module));
   free(vert_shader);
@@ -681,7 +650,6 @@ static int create_image_view(
   create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   create_info.image = r->swapchain_images[swapchain_index];
   create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  /* create_info.format = r->format.format; */
   create_info.format = r->format.format;
   create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
   create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -779,18 +747,24 @@ static int create_buffer(
   return RENDER_ERROR_NONE;
 }
 
-static uint32_t get_heap_index(struct render *r, VkMemoryPropertyFlags flags) {
-  uint32_t i, index = 0;
+static int get_heap_index(
+  struct render *r,
+  uint32_t memory_type_bit,
+  VkMemoryPropertyFlags flags)
+{
+  int i;
   VkPhysicalDeviceMemoryProperties props;
 
   r->vkGetPhysicalDeviceMemoryProperties(r->phys_devices[r->phys_id], &props);
   for (i = 0; i < props.memoryTypeCount; ++i) {
-    if (props.memoryTypes[i].propertyFlags & flags) {
-      index = i;
-      break;
+    if (memory_type_bit & (1u << i)) {
+      if (props.memoryTypes[i].propertyFlags & flags) {
+        return i;
+      }
     }
   }
-  return index;
+  /* error */
+  return -1;
 }
 
 static int write_data(
@@ -829,6 +803,7 @@ static int allocate_buffer(
   VkBuffer *buf,
   VkDeviceMemory *mem)
 {
+  int index;
   VkMemoryRequirements reqs;
   VkMemoryAllocateInfo allocate_info = { 0 };
   VkResult result;
@@ -836,8 +811,12 @@ static int allocate_buffer(
   r->vkGetBufferMemoryRequirements(r->device, *buf, &reqs);
   allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   allocate_info.allocationSize = reqs.size;
-  allocate_info.memoryTypeIndex =
-    get_heap_index(r, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+  index = get_heap_index(
+    r,
+    reqs.memoryTypeBits,
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+  if (index < 0) return RENDER_ERROR_VULKAN_MEMORY;
+  allocate_info.memoryTypeIndex = (uint32_t) index;
   result = r->vkAllocateMemory(r->device, &allocate_info, NULL, mem);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_MEMORY;
   result = r->vkBindBufferMemory(r->device, *buf, *mem, 0);
@@ -989,12 +968,6 @@ int render_configure(
   chkerr(create_device(r));
   chkerr(load_device_functions(r));
   chkerr(get_surface_format(r));
-  chkerr(verify_format_properties(
-    r,
-    r->format.format,
-    0,
-    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
-    0));
   chkerr(create_swapchain(r));
   chkerr(create_pipeline(r, vshader, fshader));
   chkerr(create_framebuffers(r));
