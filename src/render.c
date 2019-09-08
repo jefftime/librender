@@ -115,9 +115,10 @@ static int get_devices(struct render *r) {
   r->n_devices = n_devices;
   r->phys_devices = malloc(sizeof(VkPhysicalDevice) * n_devices);
   if (!r->phys_devices) return RENDER_ERROR_MEMORY;
-  result = r->vkEnumeratePhysicalDevices(r->instance,
-                                         &n_devices,
-                                         r->phys_devices);
+  result = r->vkEnumeratePhysicalDevices(
+    r->instance,
+    &n_devices,
+    r->phys_devices);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PHYSICAL_DEVICE;
   return RENDER_ERROR_NONE;
 }
@@ -175,10 +176,11 @@ static int create_surface(struct render *r, struct window *w) {
   create_info.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
   create_info.connection = window_xcb_connection(w);
   create_info.window = window_xcb_window(w);
-  result = r->vkCreateXcbSurfaceKHR(r->instance,
-                                    &create_info,
-                                    NULL,
-                                    &r->surface);
+  result = r->vkCreateXcbSurfaceKHR(
+    r->instance,
+    &create_info,
+    NULL,
+    &r->surface);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE;
   return RENDER_ERROR_NONE;
 }
@@ -188,8 +190,8 @@ static int verify_format_properties(
   VkFormat fmt,
   VkFormatFeatureFlagBits linear_tiling_flags,
   VkFormatFeatureFlagBits opt_tiling_flags,
-  VkFormatFeatureFlagBits buffer_flags
-) {
+  VkFormatFeatureFlagBits buffer_flags)
+{
   VkFormatProperties props;
 
   r->vkGetPhysicalDeviceFormatProperties(
@@ -216,16 +218,19 @@ static int verify_format_properties(
 
 static int get_queue_props(struct render *r) {
   uint32_t n_props;
-  r->vkGetPhysicalDeviceQueueFamilyProperties(r->phys_devices[r->phys_id],
-                                              &n_props,
-                                              NULL);
+
+  r->vkGetPhysicalDeviceQueueFamilyProperties(
+    r->phys_devices[r->phys_id],
+    &n_props,
+    NULL);
   if (n_props == 0) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
   r->n_queue_props = n_props;
   r->queue_props = malloc(sizeof(VkQueueFamilyProperties) * n_props);
   if (!r->queue_props) return RENDER_ERROR_MEMORY;
-  r->vkGetPhysicalDeviceQueueFamilyProperties(r->phys_devices[r->phys_id],
-                                              &n_props,
-                                              r->queue_props);
+  r->vkGetPhysicalDeviceQueueFamilyProperties(
+    r->phys_devices[r->phys_id],
+    &n_props,
+    r->queue_props);
   return RENDER_ERROR_NONE;
 }
 
@@ -238,16 +243,17 @@ static int get_present_and_graphics_indices(struct render *r) {
   for (i = 0; i < r->n_queue_props; ++i) {
     uint32_t present_support = 0;
 
-    if (((r->queue_props[i].queueCount > 0) &&
-         (r->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))) {
+    if (  (r->queue_props[i].queueCount > 0)
+       && (r->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+       ) {
       graphics_isset = 1;
       r->queue_index_graphics = i;
     }
-    result =
-      r->vkGetPhysicalDeviceSurfaceSupportKHR(r->phys_devices[r->phys_id],
-                                              (uint32_t) i,
-                                              r->surface,
-                                              &present_support);
+    result = r->vkGetPhysicalDeviceSurfaceSupportKHR(
+      r->phys_devices[r->phys_id],
+      (uint32_t) i,
+      r->surface,
+      &present_support);
     if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
     if ((r->queue_props[i].queueCount > 0) && present_support) {
       present_isset = 1;
@@ -282,19 +288,22 @@ static int create_device(struct render *r) {
   create_info.pQueueCreateInfos = queue_create_infos;
   create_info.enabledExtensionCount = 1;
   create_info.ppEnabledExtensionNames = (const char * const *) extensions;
-  result = r->vkCreateDevice(r->phys_devices[r->phys_id],
-                             &create_info,
-                             NULL,
-                             &r->device);
+  result = r->vkCreateDevice(
+    r->phys_devices[r->phys_id],
+    &create_info,
+    NULL,
+    &r->device);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_DEVICE;
-  r->vkGetDeviceQueue(r->device,
-                      (uint32_t) r->queue_index_graphics,
-                      0,
-                      &r->graphics_queue);
-  r->vkGetDeviceQueue(r->device,
-                      (uint32_t) r->queue_index_present,
-                      0,
-                      &r->present_queue);
+  r->vkGetDeviceQueue(
+    r->device,
+    (uint32_t) r->queue_index_graphics,
+    0,
+    &r->graphics_queue);
+  r->vkGetDeviceQueue(
+    r->device,
+    (uint32_t) r->queue_index_present,
+    0,
+    &r->present_queue);
   return RENDER_ERROR_NONE;
 }
 
@@ -303,32 +312,36 @@ static int get_surface_format(struct render *r) {
   VkSurfaceFormatKHR *formats;
   VkResult result;
 
-  result = r->vkGetPhysicalDeviceSurfaceFormatsKHR(r->phys_devices[r->phys_id],
-                                                   r->surface,
-                                                   &n_formats,
-                                                   NULL);
+  result = r->vkGetPhysicalDeviceSurfaceFormatsKHR(
+    r->phys_devices[r->phys_id],
+    r->surface,
+    &n_formats,
+    NULL);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
   if (!formats) return RENDER_ERROR_MEMORY;
-  result = r->vkGetPhysicalDeviceSurfaceFormatsKHR(r->phys_devices[r->phys_id],
-                                                   r->surface,
-                                                   &n_formats,
-                                                   formats);
+  result = r->vkGetPhysicalDeviceSurfaceFormatsKHR(
+    r->phys_devices[r->phys_id],
+    r->surface,
+    &n_formats,
+    formats);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   r->format = formats[0];
   free(formats);
   return RENDER_ERROR_NONE;
 }
 
-static int get_surface_caps(struct render *r,
-                            VkSurfaceCapabilitiesKHR *out_caps) {
+static int get_surface_caps(
+  struct render *r,
+  VkSurfaceCapabilitiesKHR *out_caps)
+{
   VkSurfaceCapabilitiesKHR caps = { 0 };
   VkResult result;
 
-  result =
-    r->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->phys_devices[r->phys_id],
-                                                 r->surface,
-                                                 &caps);
+  result = r->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    r->phys_devices[r->phys_id],
+    r->surface,
+    &caps);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES;
   if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
     caps.supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -343,17 +356,19 @@ static int get_swapchain_images(struct render *r) {
   uint32_t n_images;
   VkResult result;
 
-  result = r->vkGetSwapchainImagesKHR(r->device,
-                                      r->swapchain,
-                                      &n_images,
-                                      NULL);
+  result = r->vkGetSwapchainImagesKHR(
+    r->device,
+    r->swapchain,
+    &n_images,
+    NULL);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES;
   r->swapchain_images = malloc(sizeof(VkImage) * n_images);
   if (!r->swapchain_images) return RENDER_ERROR_MEMORY;
-  result = r->vkGetSwapchainImagesKHR(r->device,
-                                      r->swapchain,
-                                      &n_images,
-                                      r->swapchain_images);
+  result = r->vkGetSwapchainImagesKHR(
+    r->device,
+    r->swapchain,
+    &n_images,
+    r->swapchain_images);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES;
   r->n_swapchain_images = n_images;
   return RENDER_ERROR_NONE;
@@ -378,19 +393,18 @@ static int create_swapchain(struct render *r) {
   create_info.compositeAlpha = caps.supportedCompositeAlpha;
   create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
   create_info.clipped = VK_TRUE;
-  result = r->vkCreateSwapchainKHR(r->device,
-                                   &create_info,
-                                   NULL,
-                                   &r->swapchain);
+  result = r->vkCreateSwapchainKHR(
+    r->device,
+    &create_info,
+    NULL,
+    &r->swapchain);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN;
   r->swap_extent = caps.currentExtent;
   chkerr(get_swapchain_images(r));
   return RENDER_ERROR_NONE;
 }
 
-static int read_shader(char *filename,
-                       unsigned char **out,
-                       size_t *out_len) {
+static int read_shader(char *filename, unsigned char **out, size_t *out_len) {
   unsigned char *buf;
   long size;
   size_t read;
@@ -412,35 +426,41 @@ static int read_shader(char *filename,
   return RENDER_ERROR_NONE;
 }
 
-static int create_shader(struct render *r,
-                         unsigned char *source,
-                         size_t len,
-                         VkShaderModule *out_module) {
+static int create_shader(
+  struct render *r,
+  unsigned char *source,
+  size_t len,
+  VkShaderModule *out_module)
+{
   VkShaderModuleCreateInfo create_info = { 0 };
   VkResult result;
 
   create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   create_info.codeSize = len;
   create_info.pCode = (uint32_t *) source;
-  result = r->vkCreateShaderModule(r->device,
-                                   &create_info,
-                                   NULL,
-                                   out_module);
+  result = r->vkCreateShaderModule(
+    r->device,
+    &create_info,
+    NULL,
+    out_module);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SHADER_MODULE;
   return 0;
 }
 
-static int create_pipeline_layout(struct render *r,
-                                  VkPipelineLayout *out_layout) {
+static int create_pipeline_layout(
+  struct render *r,
+  VkPipelineLayout *out_layout)
+{
   VkResult result;
   VkPipelineLayoutCreateInfo create_info = {
     VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
   };
 
-  result = r->vkCreatePipelineLayout(r->device,
-                                     &create_info,
-                                     NULL,
-                                     out_layout);
+  result = r->vkCreatePipelineLayout(
+    r->device,
+    &create_info,
+    NULL,
+    out_layout);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PIPELINE_LAYOUT;
   return RENDER_ERROR_NONE;
 }
@@ -453,8 +473,9 @@ static int create_render_pass(struct render *r) {
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
     0,
-    (VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),
+    ( VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+    | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    ),
     0
   };
   VkAttachmentDescription attachment = { 0 };
@@ -482,17 +503,16 @@ static int create_render_pass(struct render *r) {
   create_info.pSubpasses = &subpass;
   create_info.dependencyCount = 1;
   create_info.pDependencies = &dependency;
-  result = r->vkCreateRenderPass(r->device,
-                                 &create_info,
-                                 NULL,
-                                 &r->render_pass);
+  result = r->vkCreateRenderPass(
+    r->device,
+    &create_info,
+    NULL,
+    &r->render_pass);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_RENDER_PASS;
   return RENDER_ERROR_NONE;
 }
 
-static int create_pipeline(struct render *r,
-                           char *vshader,
-                           char *fshader) {
+static int create_pipeline(struct render *r, char *vshader, char *fshader) {
   unsigned char *vert_shader, *frag_shader;
   size_t vlen, flen;
   VkPipelineShaderStageCreateInfo shader_info[] = { { 0 }, { 0 } };
@@ -604,9 +624,10 @@ static int create_pipeline(struct render *r,
   depth_info.stencilTestEnable = VK_FALSE;
 
   color_attachment.blendEnable = VK_FALSE;
-  color_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
-                                  | VK_COLOR_COMPONENT_G_BIT
-                                  | VK_COLOR_COMPONENT_B_BIT;
+  color_attachment.colorWriteMask = ( VK_COLOR_COMPONENT_R_BIT
+                                    | VK_COLOR_COMPONENT_G_BIT
+                                    | VK_COLOR_COMPONENT_B_BIT
+                                    );
 
   color_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   color_info.logicOpEnable = VK_FALSE;
@@ -636,21 +657,24 @@ static int create_pipeline(struct render *r,
   graphics_pipeline.basePipelineHandle = VK_NULL_HANDLE;
   graphics_pipeline.basePipelineIndex = -1;
 
-  result = r->vkCreateGraphicsPipelines(r->device,
-                                        VK_NULL_HANDLE,
-                                        1,
-                                        &graphics_pipeline,
-                                        NULL,
-                                        &r->pipeline);
+  result = r->vkCreateGraphicsPipelines(
+    r->device,
+    VK_NULL_HANDLE,
+    1,
+    &graphics_pipeline,
+    NULL,
+    &r->pipeline);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_PIPELINE;
   r->vkDestroyPipelineLayout(r->device, layout, NULL);
 
   return 0;
 }
 
-static int create_image_view(struct render *r,
-                             size_t swapchain_index,
-                             VkImageView *out_view) {
+static int create_image_view(
+  struct render *r,
+  size_t swapchain_index,
+  VkImageView *out_view)
+{
   VkImageViewCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -697,10 +721,7 @@ static int create_framebuffers(struct render *r) {
     create_info.width = r->swap_extent.width;
     create_info.height = r->swap_extent.height;
     create_info.layers = 1;
-    result = r->vkCreateFramebuffer(r->device,
-                                    &create_info,
-                                    NULL,
-                                    &fb);
+    result = r->vkCreateFramebuffer(r->device, &create_info, NULL, &fb);
     if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_FRAMEBUFFER;
     r->framebuffers[i] = fb;
   }
@@ -713,10 +734,11 @@ static int create_command_pool(struct render *r) {
 
   create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
   create_info.queueFamilyIndex = (uint32_t) r->queue_index_graphics;
-  result = r->vkCreateCommandPool(r->device,
-                                  &create_info,
-                                  NULL,
-                                  &r->command_pool);
+  result = r->vkCreateCommandPool(
+    r->device,
+    &create_info,
+    NULL,
+    &r->command_pool);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_COMMAND_POOL;
   return RENDER_ERROR_NONE;
 }
@@ -731,17 +753,20 @@ static int create_command_buffers(struct render *r) {
   allocate_info.commandPool = r->command_pool;
   allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   allocate_info.commandBufferCount = (uint32_t) r->n_swapchain_images;
-  result = r->vkAllocateCommandBuffers(r->device,
-                                       &allocate_info,
-                                       r->command_buffers);
+  result = r->vkAllocateCommandBuffers(
+    r->device,
+    &allocate_info,
+    r->command_buffers);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_COMMAND_BUFFER;
   return RENDER_ERROR_NONE;
 }
 
-static int create_buffer(struct render *r,
-                         VkBuffer *out_buf,
-                         size_t size,
-                         VkBufferUsageFlags flags) {
+static int create_buffer(
+  struct render *r,
+  VkBuffer *out_buf,
+  size_t size,
+  VkBufferUsageFlags flags)
+{
   VkBufferCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -768,10 +793,12 @@ static uint32_t get_heap_index(struct render *r, VkMemoryPropertyFlags flags) {
   return index;
 }
 
-static int write_data(struct render *r,
-                      VkDeviceMemory *mem,
-                      void *data,
-                      size_t size) {
+static int write_data(
+  struct render *r,
+  VkDeviceMemory *mem,
+  void *data,
+  size_t size)
+{
   void *dst;
   VkMappedMemoryRange range = { 0 };
   VkResult result;
@@ -780,12 +807,13 @@ static int write_data(struct render *r,
   range.memory = *mem;
   range.offset = 0;
   range.size = size;
-  result = r->vkMapMemory(r->device,
-                          range.memory,
-                          range.offset,
-                          range.size,
-                          0,
-                          &dst);
+  result = r->vkMapMemory(
+    r->device,
+    range.memory,
+    range.offset,
+    range.size,
+    0,
+    &dst);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_MEMORY_MAP;
   memcpy(dst, data, range.size);
   result = r->vkFlushMappedMemoryRanges(r->device, 1, &range);
@@ -796,9 +824,11 @@ static int write_data(struct render *r,
   return RENDER_ERROR_NONE;
 }
 
-static int allocate_buffer(struct render *r,
-                           VkBuffer *buf,
-                           VkDeviceMemory *mem) {
+static int allocate_buffer(
+  struct render *r,
+  VkBuffer *buf,
+  VkDeviceMemory *mem)
+{
   VkMemoryRequirements reqs;
   VkMemoryAllocateInfo allocate_info = { 0 };
   VkResult result;
@@ -826,14 +856,16 @@ static int create_vertex_data(struct render *r) {
   };
   uint16_t indices[] = { 0, 1, 2, 2, 3, 0 };
 
-  chkerr(create_buffer(r,
-                       &r->vertex_buffer,
-                       size_verts,
-                       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
-  chkerr(create_buffer(r,
-                       &r->index_buffer,
-                       size_indices,
-                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+  chkerr(create_buffer(
+    r,
+    &r->vertex_buffer,
+    size_verts,
+    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
+  chkerr(create_buffer(
+    r,
+    &r->index_buffer,
+    size_indices,
+    VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
   chkerr(allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
   chkerr(allocate_buffer(r, &r->index_buffer, &r->index_memory));
   chkerr(write_data(r, &r->vertex_memory, vertices, size_verts));
@@ -863,24 +895,28 @@ static int write_buffers(struct render *r) {
     render_info.renderArea.extent = r->swap_extent;
     render_info.clearValueCount = 1;
     render_info.pClearValues = &clear_value;
-    r->vkCmdBeginRenderPass(r->command_buffers[i],
-                            &render_info,
-                            VK_SUBPASS_CONTENTS_INLINE);
+    r->vkCmdBeginRenderPass(
+      r->command_buffers[i],
+      &render_info,
+      VK_SUBPASS_CONTENTS_INLINE);
     {
       VkDeviceSize offsets[] = { 0 };
 
-      r->vkCmdBindPipeline(r->command_buffers[i],
-                           VK_PIPELINE_BIND_POINT_GRAPHICS,
-                           r->pipeline);
-      r->vkCmdBindVertexBuffers(r->command_buffers[i],
-                                0,
-                                1,
-                                &r->vertex_buffer,
-                                offsets);
-      r->vkCmdBindIndexBuffer(r->command_buffers[i],
-                              r->index_buffer,
-                              0,
-                              VK_INDEX_TYPE_UINT16);
+      r->vkCmdBindPipeline(
+        r->command_buffers[i],
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        r->pipeline);
+      r->vkCmdBindVertexBuffers(
+        r->command_buffers[i],
+        0,
+        1,
+        &r->vertex_buffer,
+        offsets);
+      r->vkCmdBindIndexBuffer(
+        r->command_buffers[i],
+        r->index_buffer,
+        0,
+        VK_INDEX_TYPE_UINT16);
       r->vkCmdDrawIndexed(r->command_buffers[i], 6, 1, 0, 0, 0);
     }
     r->vkCmdEndRenderPass(r->command_buffers[i]);
@@ -895,15 +931,17 @@ static int create_semaphores(struct render *r) {
   VkResult result;
 
   create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  result = r->vkCreateSemaphore(r->device,
-                                &create_info,
-                                NULL,
-                                &r->image_semaphore);
+  result = r->vkCreateSemaphore(
+    r->device,
+    &create_info,
+    NULL,
+    &r->image_semaphore);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SEMAPHORE;
-  result = r->vkCreateSemaphore(r->device,
-                                &create_info,
-                                NULL,
-                                &r->render_semaphore);
+  result = r->vkCreateSemaphore(
+    r->device,
+    &create_info,
+    NULL,
+    &r->render_semaphore);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SEMAPHORE;
   return RENDER_ERROR_NONE;
 }
@@ -936,11 +974,13 @@ void render_deinit(struct render *r) {
   memset((unsigned char *) r, 0, sizeof(struct render));
 }
 
-int render_configure(struct render *r,
-                     unsigned int width,
-                     unsigned int height,
-                     char *vshader,
-                     char *fshader) {
+int render_configure(
+  struct render *r,
+  unsigned int width,
+  unsigned int height,
+  char *vshader,
+  char *fshader)
+{
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = 0;
@@ -978,10 +1018,11 @@ void render_destroy_pipeline(struct render *r) {
     r->vkDestroyBuffer(r->device, r->index_buffer, NULL);
     r->vkFreeMemory(r->device, r->vertex_memory, NULL);
     r->vkFreeMemory(r->device, r->index_memory, NULL);
-    r->vkFreeCommandBuffers(r->device,
-                            r->command_pool,
-                            (uint32_t) r->n_swapchain_images,
-                            r->command_buffers);
+    r->vkFreeCommandBuffers(
+      r->device,
+      r->command_pool,
+      (uint32_t) r->n_swapchain_images,
+      r->command_buffers);
     free(r->command_buffers);
     r->vkDestroyCommandPool(r->device, r->command_pool, NULL);
     for (i = 0; i < r->n_swapchain_images; ++i) {
@@ -1009,12 +1050,13 @@ int render_update(struct render *r) {
   VkPresentInfoKHR present_info = { 0 };
   VkResult result;
 
-  result = r->vkAcquireNextImageKHR(r->device,
-                                    r->swapchain,
-                                    (uint64_t) 2e9L,
-                                    r->image_semaphore,
-                                    VK_NULL_HANDLE,
-                                    &image_index);
+  result = r->vkAcquireNextImageKHR(
+    r->device,
+    r->swapchain,
+    (uint64_t) 2e9L,
+    r->image_semaphore,
+    VK_NULL_HANDLE,
+    &image_index);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_ACQUIRE_IMAGE;
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit_info.waitSemaphoreCount = 1;
@@ -1025,10 +1067,11 @@ int render_update(struct render *r) {
   submit_info.pCommandBuffers = r->command_buffers + image_index;
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = &r->render_semaphore;
-  result = r->vkQueueSubmit(r->graphics_queue,
-                            1,
-                            &submit_info,
-                            VK_NULL_HANDLE);
+  result = r->vkQueueSubmit(
+    r->graphics_queue,
+    1,
+    &submit_info,
+    VK_NULL_HANDLE);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_QUEUE_SUBMIT;
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present_info.waitSemaphoreCount = 1;
