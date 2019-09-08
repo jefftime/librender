@@ -99,6 +99,7 @@ static int load_instance_functions(struct render *r) {
   load(vkDestroyFramebuffer);
   load(vkDestroyCommandPool);
   load(vkFreeCommandBuffers);
+  load(vkGetPhysicalDeviceFormatProperties);
   return RENDER_ERROR_NONE;
 
 #undef load
@@ -182,6 +183,37 @@ static int create_surface(struct render *r, struct window *w) {
   return RENDER_ERROR_NONE;
 }
 
+static int verify_format_properties(
+  struct render *r,
+  VkFormat fmt,
+  VkFormatFeatureFlagBits linear_tiling_flags,
+  VkFormatFeatureFlagBits opt_tiling_flags,
+  VkFormatFeatureFlagBits buffer_flags
+) {
+  VkFormatProperties props;
+
+  r->vkGetPhysicalDeviceFormatProperties(
+    r->phys_devices[r->phys_id],
+    fmt,
+    &props);
+  if (linear_tiling_flags) {
+    if (!(props.linearTilingFeatures & linear_tiling_flags)) {
+      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_LINEAR;
+    }
+  }
+  if (opt_tiling_flags) {
+    if (!(props.optimalTilingFeatures & opt_tiling_flags)) {
+      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_OPTIMAL;
+    }
+  }
+  if (buffer_flags) {
+    if (!(props.bufferFeatures & buffer_flags)) {
+      return RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_BUFFER;
+    }
+  }
+  return RENDER_ERROR_NONE;
+}
+
 static int get_queue_props(struct render *r) {
   uint32_t n_props;
   r->vkGetPhysicalDeviceQueueFamilyProperties(r->phys_devices[r->phys_id],
@@ -222,7 +254,8 @@ static int get_present_and_graphics_indices(struct render *r) {
       r->queue_index_present = i;
     }
   }
-  return RENDER_ERROR_NONE;
+  if (graphics_isset && present_isset) return RENDER_ERROR_NONE;
+  return RENDER_ERROR_VULKAN_QUEUE_INDICES;
 }
 
 static int create_device(struct render *r) {
@@ -240,12 +273,12 @@ static int create_device(struct render *r) {
   queue_create_infos[0].queueFamilyIndex = (uint32_t) r->queue_index_graphics;
   queue_create_infos[0].queueCount = 1;
   queue_create_infos[0].pQueuePriorities = &queue_priority;
-  queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  queue_create_infos[1].queueFamilyIndex = (uint32_t) r->queue_index_present;
-  queue_create_infos[1].queueCount = 1;
-  queue_create_infos[1].pQueuePriorities = &queue_priority;
+  /* queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO; */
+  /* queue_create_infos[1].queueFamilyIndex = (uint32_t) r->queue_index_present; */
+  /* queue_create_infos[1].queueCount = 1; */
+  /* queue_create_infos[1].pQueuePriorities = &queue_priority; */
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  create_info.queueCreateInfoCount = 2;
+  create_info.queueCreateInfoCount = 1;
   create_info.pQueueCreateInfos = queue_create_infos;
   create_info.enabledExtensionCount = 1;
   create_info.ppEnabledExtensionNames = (const char * const *) extensions;
@@ -297,6 +330,11 @@ static int get_surface_caps(struct render *r,
                                                  r->surface,
                                                  &caps);
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES;
+  if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+    caps.supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  } else {
+    return RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES;
+  }
   *out_caps = caps;
   return RENDER_ERROR_NONE;
 }
@@ -547,6 +585,7 @@ static int create_pipeline(struct render *r,
   raster_info.cullMode = VK_CULL_MODE_BACK_BIT;
   raster_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   raster_info.depthBiasEnable = VK_FALSE;
+  raster_info.lineWidth = 1.0;
 
   multisample_info.sType =
     VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -618,6 +657,7 @@ static int create_image_view(struct render *r,
   create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   create_info.image = r->swapchain_images[swapchain_index];
   create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  /* create_info.format = r->format.format; */
   create_info.format = r->format.format;
   create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
   create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -904,12 +944,17 @@ int render_configure(struct render *r,
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = 0;
-  /* r->phys_id = phys_id; */
   chkerr(get_queue_props(r));
   chkerr(get_present_and_graphics_indices(r));
   chkerr(create_device(r));
   chkerr(load_device_functions(r));
   chkerr(get_surface_format(r));
+  chkerr(verify_format_properties(
+    r,
+    r->format.format,
+    0,
+    VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT,
+    0));
   chkerr(create_swapchain(r));
   chkerr(create_pipeline(r, vshader, fshader));
   chkerr(create_framebuffers(r));

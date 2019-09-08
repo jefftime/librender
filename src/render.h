@@ -35,44 +35,47 @@ typedef uint32_t xcb_visualid_t;
 /* libwindow */
 struct window;
 
-#define RENDER_ERROR_NONE                         0
-#define RENDER_ERROR_MEMORY                      -1
-#define RENDER_ERROR_FILE                        -2
-#define RENDER_ERROR_NULL                        -3
-#define RENDER_ERROR_VULKAN_LOAD                 -4
-#define RENDER_ERROR_VULKAN_INSTANCE             -5
-#define RENDER_ERROR_VULKAN_PREINST_LOAD         -6
-#define RENDER_ERROR_VULKAN_INST_LOAD            -7
-#define RENDER_ERROR_VULKAN_PHYSICAL_DEVICE      -8
-#define RENDER_ERROR_VULKAN_NO_DEVICES           -9
-#define RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD   -10
-#define RENDER_ERROR_VULKAN_DEVICE_FUNC_LOAD     -11
-#define RENDER_ERROR_VULKAN_SURFACE              -12
-#define RENDER_ERROR_VULKAN_QUEUE_INDICES        -13
-#define RENDER_ERROR_VULKAN_QUEUE_INDEX_MISMATCH -14
-#define RENDER_ERROR_VULKAN_CREATE_DEVICE        -15
-#define RENDER_ERROR_VULKAN_SURFACE_FORMAT       -16
-#define RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES -17
-#define RENDER_ERROR_VULKAN_SWAPCHAIN            -18
-#define RENDER_ERROR_VULKAN_SHADER_MODULE        -19
-#define RENDER_ERROR_VULKAN_SHADER_READ          -20
-#define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT      -21
-#define RENDER_ERROR_VULKAN_CREATE_PIPELINE      -22
-#define RENDER_ERROR_VULKAN_RENDER_PASS          -23
-#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES     -24
-#define RENDER_ERROR_VULKAN_IMAGE_VIEW           -25
-#define RENDER_ERROR_VULKAN_FRAMEBUFFER          -26
-#define RENDER_ERROR_VULKAN_COMMAND_POOL         -27
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER       -28
-#define RENDER_ERROR_VULKAN_BUFFER               -29
-#define RENDER_ERROR_VULKAN_MEMORY               -30
-#define RENDER_ERROR_VULKAN_MEMORY_MAP           -31
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN -32
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END   -33
-#define RENDER_ERROR_VULKAN_SEMAPHORE            -34
-#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE        -35
-#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT         -36
-#define RENDER_ERROR_VULKAN_QUEUE_PRESENT        -37
+#define RENDER_ERROR_NONE                              0
+#define RENDER_ERROR_MEMORY                           -1
+#define RENDER_ERROR_FILE                             -2
+#define RENDER_ERROR_NULL                             -3
+#define RENDER_ERROR_VULKAN_LOAD                      -4
+#define RENDER_ERROR_VULKAN_INSTANCE                  -5
+#define RENDER_ERROR_VULKAN_PREINST_LOAD              -6
+#define RENDER_ERROR_VULKAN_INST_LOAD                 -7
+#define RENDER_ERROR_VULKAN_PHYSICAL_DEVICE           -8
+#define RENDER_ERROR_VULKAN_NO_DEVICES                -9
+#define RENDER_ERROR_VULKAN_INSTANCE_FUNC_LOAD        -10
+#define RENDER_ERROR_VULKAN_DEVICE_FUNC_LOAD          -11
+#define RENDER_ERROR_VULKAN_SURFACE                   -12
+#define RENDER_ERROR_VULKAN_QUEUE_INDICES             -13
+#define RENDER_ERROR_VULKAN_QUEUE_INDEX_MISMATCH      -14
+#define RENDER_ERROR_VULKAN_CREATE_DEVICE             -15
+#define RENDER_ERROR_VULKAN_SURFACE_FORMAT            -16
+#define RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_LINEAR  -17
+#define RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_OPTIMAL -18
+#define RENDER_ERROR_VULKAN_FORMAT_PROPERTIES_BUFFER  -19
+#define RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES      -20
+#define RENDER_ERROR_VULKAN_SWAPCHAIN                 -21
+#define RENDER_ERROR_VULKAN_SHADER_MODULE             -22
+#define RENDER_ERROR_VULKAN_SHADER_READ               -23
+#define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT           -24
+#define RENDER_ERROR_VULKAN_CREATE_PIPELINE           -25
+#define RENDER_ERROR_VULKAN_RENDER_PASS               -26
+#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES          -27
+#define RENDER_ERROR_VULKAN_IMAGE_VIEW                -28
+#define RENDER_ERROR_VULKAN_FRAMEBUFFER               -29
+#define RENDER_ERROR_VULKAN_COMMAND_POOL              -30
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER            -31
+#define RENDER_ERROR_VULKAN_BUFFER                    -32
+#define RENDER_ERROR_VULKAN_MEMORY                    -33
+#define RENDER_ERROR_VULKAN_MEMORY_MAP                -34
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN      -35
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END        -36
+#define RENDER_ERROR_VULKAN_SEMAPHORE                 -37
+#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE             -38
+#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT              -39
+#define RENDER_ERROR_VULKAN_QUEUE_PRESENT             -40
 
 /* Easily get vulkan function definitions */
 #define vkfunc(f) PFN_##f f
@@ -100,6 +103,7 @@ struct render {
   vkfunc(vkDestroyDevice);
   vkfunc(vkDestroySwapchainKHR);
   vkfunc(vkDestroySurfaceKHR);
+  vkfunc(vkGetPhysicalDeviceFormatProperties);
 
   /* Device functions */
   vkfunc(vkCreateSwapchainKHR);
