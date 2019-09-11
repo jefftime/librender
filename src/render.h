@@ -190,11 +190,13 @@ struct render {
 /* render.c */
 int render_init(struct render *r, struct window *w);
 void render_deinit(struct render *r);
-int render_configure(struct render *r,
-                     unsigned int width,
-                     unsigned int height,
-                     char *vshader,
-                     char *fshader);
+int render_configure(
+  struct render *r,
+  unsigned int width,
+  unsigned int height,
+  char *vshader,
+  char *fshader
+);
 void render_destroy_pipeline(struct render *r);
 int render_update(struct render *r);
 /* **************************************** */
