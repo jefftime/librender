@@ -302,8 +302,8 @@ static int get_surface_format(struct render *r) {
 
 static int get_surface_caps(
   struct render *r,
-  VkSurfaceCapabilitiesKHR *out_caps)
-{
+  VkSurfaceCapabilitiesKHR *out_caps
+) {
   VkSurfaceCapabilitiesKHR caps = { 0 };
   VkResult result;
 
@@ -399,8 +399,8 @@ static int create_shader(
   struct render *r,
   unsigned char *source,
   size_t len,
-  VkShaderModule *out_module)
-{
+  VkShaderModule *out_module
+) {
   VkShaderModuleCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -418,8 +418,8 @@ static int create_shader(
 
 static int create_pipeline_layout(
   struct render *r,
-  VkPipelineLayout *out_layout)
-{
+  VkPipelineLayout *out_layout
+) {
   VkResult result;
   VkPipelineLayoutCreateInfo create_info = {
     VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
@@ -642,8 +642,8 @@ static int create_pipeline(struct render *r, char *vshader, char *fshader) {
 static int create_image_view(
   struct render *r,
   size_t swapchain_index,
-  VkImageView *out_view)
-{
+  VkImageView *out_view
+) {
   VkImageViewCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -733,8 +733,8 @@ static int create_buffer(
   struct render *r,
   VkBuffer *out_buf,
   size_t size,
-  VkBufferUsageFlags flags)
-{
+  VkBufferUsageFlags flags
+) {
   VkBufferCreateInfo create_info = { 0 };
   VkResult result;
 
@@ -750,8 +750,8 @@ static int create_buffer(
 static int get_heap_index(
   struct render *r,
   uint32_t memory_type_bit,
-  VkMemoryPropertyFlags flags)
-{
+  VkMemoryPropertyFlags flags
+) {
   int i;
   VkPhysicalDeviceMemoryProperties props;
 
@@ -771,8 +771,8 @@ static int write_data(
   struct render *r,
   VkDeviceMemory *mem,
   void *data,
-  size_t size)
-{
+  size_t size
+) {
   void *dst;
   VkMappedMemoryRange range = { 0 };
   VkResult result;
@@ -801,8 +801,8 @@ static int write_data(
 static int allocate_buffer(
   struct render *r,
   VkBuffer *buf,
-  VkDeviceMemory *mem)
-{
+  VkDeviceMemory *mem
+) {
   int index;
   VkMemoryRequirements reqs;
   VkMemoryAllocateInfo allocate_info = { 0 };
@@ -958,8 +958,8 @@ int render_configure(
   unsigned int width,
   unsigned int height,
   char *vshader,
-  char *fshader)
-{
+  char *fshader
+) {
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = 0;
