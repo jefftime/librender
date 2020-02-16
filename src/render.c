@@ -1,6 +1,6 @@
-/* This file is a part of librender
+/* Copyright 2019, Jeffery Stager
  *
- * Copyright 2019, Jeffery Stager
+ * This file is part of librender.
  *
  * librender is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,32 +18,51 @@
 
 #include "render.h"
 
-/* libwindow */
-xcb_connection_t *window_xcb_connection(struct window *w);
-xcb_window_t window_xcb_window(struct window *w);
-
-#include <error.h>
+#include <error.h>              /* chkerr, chkerrf */
 #include <stdint.h>
 #include <vulkan/vk_platform.h>
 #include <vulkan/vulkan_core.h>
 
 #ifdef TARGET_OS_LINUX
-#include <vulkan/vulkan_xcb.h>
-#endif
 
-#include <dlfcn.h>
+/* libwindow */
+xcb_connection_t *window_xcb_connection(struct window *w);
+xcb_window_t window_xcb_window(struct window *w);
+
+#include <vulkan/vulkan_xcb.h>
+#include <dlfcn.h>              /* dlopen, dlsym, dlclose */
+
+#endif	/* TARGET_OS_LINUX */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static int load_vulkan(struct render *r) {
+  /**
+   * WARNING: this won't work on systems where object pointers and function
+   * pointers have different size and/or alignments
+   */
+  union {
+    PFN_vkGetInstanceProcAddr func;
+    void *ptr;
+  } dlsym_result;
+
   r->vklib = dlopen("libvulkan.so", RTLD_NOW);
   if (!r->vklib) return RENDER_ERROR_VULKAN_LOAD;
-  /* This gets around the -pedantic error */
-  *(PFN_vkGetInstanceProcAddr **) (&r->vkGetInstanceProcAddr) =
-    dlsym(r->vklib, "vkGetInstanceProcAddr");
+
+  /**
+   * Object pointers and function pointers are treated differently in
+   * ISO C, so we have to type pun the result of dlsym()
+   */
+  dlsym_result.ptr = dlsym(r->vklib, "vkGetInstanceProcAddr");
+  r->vkGetInstanceProcAddr = dlsym_result.func;
   return RENDER_ERROR_NONE;
 }
+
+#define load(f) \
+  if (!(r->f = (PFN_##f) r->vkGetInstanceProcAddr(NULL, #f))) \
+    return RENDER_ERROR_VULKAN_PREINST_LOAD;
 
 static int load_preinstance_functions(struct render *r) {
 #define load(f) \
@@ -117,7 +136,8 @@ static int get_devices(struct render *r) {
   result = r->vkEnumeratePhysicalDevices(
     r->instance,
     &n_devices,
-    r->phys_devices);
+    r->phys_devices
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PHYSICAL_DEVICE;
   return RENDER_ERROR_NONE;
 }
@@ -163,6 +183,8 @@ static int load_device_functions(struct render *r) {
   load(vkDestroyBuffer);
   load(vkFreeMemory);
   load(vkDestroySemaphore);
+  load(vkCreateDescriptorSetLayout);
+  load(vkDestroyDescriptorSetLayout);
   return RENDER_ERROR_NONE;
 
 #undef load
@@ -179,7 +201,8 @@ static int create_surface(struct render *r, struct window *w) {
     r->instance,
     &create_info,
     NULL,
-    &r->surface);
+    &r->surface
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE;
   return RENDER_ERROR_NONE;
 }
@@ -190,7 +213,8 @@ static int get_queue_props(struct render *r) {
   r->vkGetPhysicalDeviceQueueFamilyProperties(
     r->phys_devices[r->phys_id],
     &n_props,
-    NULL);
+    NULL
+  );
   if (n_props == 0) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
   r->n_queue_props = n_props;
   r->queue_props = malloc(sizeof(VkQueueFamilyProperties) * n_props);
@@ -198,11 +222,12 @@ static int get_queue_props(struct render *r) {
   r->vkGetPhysicalDeviceQueueFamilyProperties(
     r->phys_devices[r->phys_id],
     &n_props,
-    r->queue_props);
+    r->queue_props
+  );
   return RENDER_ERROR_NONE;
 }
 
-static int get_present_and_graphics_indices(struct render *r) {
+static int get_queue_indices(struct render *r) {
   int graphics_isset = 0;
   int present_isset = 0;
   size_t i;
@@ -221,7 +246,8 @@ static int get_present_and_graphics_indices(struct render *r) {
       r->phys_devices[r->phys_id],
       (uint32_t) i,
       r->surface,
-      &present_support);
+      &present_support
+    );
     if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_QUEUE_INDICES;
     if ((r->queue_props[i].queueCount > 0) && present_support) {
       present_isset = 1;
@@ -246,7 +272,7 @@ static int create_device(struct render *r) {
   }
   queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   queue_create_infos[0].queueFamilyIndex = (uint32_t) r->queue_index_graphics;
-  queue_create_infos[0].queueCount = 2;
+  queue_create_infos[0].queueCount = 1;
   queue_create_infos[0].pQueuePriorities = &queue_priority;
   queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
   queue_create_infos[1].queueFamilyIndex = (uint32_t) r->queue_index_present;
@@ -261,18 +287,21 @@ static int create_device(struct render *r) {
     r->phys_devices[r->phys_id],
     &create_info,
     NULL,
-    &r->device);
+    &r->device
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_DEVICE;
   r->vkGetDeviceQueue(
     r->device,
     (uint32_t) r->queue_index_graphics,
     0,
-    &r->graphics_queue);
+    &r->graphics_queue
+  );
   r->vkGetDeviceQueue(
     r->device,
     (uint32_t) r->queue_index_present,
     0,
-    &r->present_queue);
+    &r->present_queue
+  );
   return RENDER_ERROR_NONE;
 }
 
@@ -285,7 +314,8 @@ static int get_surface_format(struct render *r) {
     r->phys_devices[r->phys_id],
     r->surface,
     &n_formats,
-    NULL);
+    NULL
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   formats = malloc(sizeof(VkSurfaceFormatKHR) * n_formats);
   if (!formats) return RENDER_ERROR_MEMORY;
@@ -293,7 +323,8 @@ static int get_surface_format(struct render *r) {
     r->phys_devices[r->phys_id],
     r->surface,
     &n_formats,
-    formats);
+    formats
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_FORMAT;
   r->format = formats[0];
   free(formats);
@@ -310,7 +341,8 @@ static int get_surface_caps(
   result = r->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     r->phys_devices[r->phys_id],
     r->surface,
-    &caps);
+    &caps
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SURFACE_CAPABILITIES;
   if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
     caps.supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -329,7 +361,8 @@ static int get_swapchain_images(struct render *r) {
     r->device,
     r->swapchain,
     &n_images,
-    NULL);
+    NULL
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES;
   r->swapchain_images = malloc(sizeof(VkImage) * n_images);
   if (!r->swapchain_images) return RENDER_ERROR_MEMORY;
@@ -337,7 +370,8 @@ static int get_swapchain_images(struct render *r) {
     r->device,
     r->swapchain,
     &n_images,
-    r->swapchain_images);
+    r->swapchain_images
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES;
   r->n_swapchain_images = n_images;
   return RENDER_ERROR_NONE;
@@ -366,7 +400,8 @@ static int create_swapchain(struct render *r) {
     r->device,
     &create_info,
     NULL,
-    &r->swapchain);
+    &r->swapchain
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SWAPCHAIN;
   r->swap_extent = caps.currentExtent;
   chkerr(get_swapchain_images(r));
@@ -411,9 +446,32 @@ static int create_shader(
     r->device,
     &create_info,
     NULL,
-    out_module);
+    out_module
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SHADER_MODULE;
   return 0;
+}
+
+static int create_descriptor_set_layout(struct render *r) {
+  VkDescriptorSetLayoutBinding layout_binding = { 0 };
+  VkDescriptorSetLayoutCreateInfo descriptor_layout_info = { 0 };
+  VkResult result;
+
+  layout_binding.binding = 0;
+  layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  layout_binding.descriptorCount = 1;
+  layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  descriptor_layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptor_layout_info.bindingCount = 1;
+  descriptor_layout_info.pBindings = &layout_binding;
+  result = r->vkCreateDescriptorSetLayout(
+    r->device,
+    &descriptor_layout_info,
+    NULL,
+    &r->descriptor_set_layout
+  );
+  if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_DESCRIPTOR_SET_LAYOUT;
+  return RENDER_ERROR_NONE;
 }
 
 static int create_pipeline_layout(
@@ -421,15 +479,18 @@ static int create_pipeline_layout(
   VkPipelineLayout *out_layout
 ) {
   VkResult result;
-  VkPipelineLayoutCreateInfo create_info = {
-    VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO
-  };
+  VkPipelineLayoutCreateInfo create_info = { 0 };
 
+  /* chkerr(create_descriptor_set_layout(r)); */
+  create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  /* create_info.setLayoutCount = 1; */
+  /* create_info.pSetLayouts = &r->descriptor_set_layout; */
   result = r->vkCreatePipelineLayout(
     r->device,
     &create_info,
     NULL,
-    out_layout);
+    out_layout
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_PIPELINE_LAYOUT;
   return RENDER_ERROR_NONE;
 }
@@ -476,23 +537,28 @@ static int create_render_pass(struct render *r) {
     r->device,
     &create_info,
     NULL,
-    &r->render_pass);
+    &r->render_pass
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_RENDER_PASS;
   return RENDER_ERROR_NONE;
 }
 
-static int create_pipeline(struct render *r, char *vshader, char *fshader) {
+static int create_pipeline(
+  struct render *r,
+  size_t n_bindings,
+  VkVertexInputBindingDescription *bindings,
+  size_t n_attrs,
+  VkVertexInputAttributeDescription *attrs,
+  char *vshader,
+  char *fshader
+) {
   unsigned char *vert_shader, *frag_shader;
   size_t vlen, flen;
+
+  VkShaderModule vert_module, frag_module;
+
   VkPipelineShaderStageCreateInfo shader_info[] = { { 0 }, { 0 } };
 
-  VkVertexInputBindingDescription bindings[] = {
-    { 0, sizeof(float) * 6, VK_VERTEX_INPUT_RATE_VERTEX }
-  };
-  VkVertexInputAttributeDescription attrs[] = {
-    { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 },
-    { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3 }
-  };
   VkPipelineVertexInputStateCreateInfo vertex_info = { 0 };
 
   VkPipelineInputAssemblyStateCreateInfo assembly_info = { 0 };
@@ -522,25 +588,24 @@ static int create_pipeline(struct render *r, char *vshader, char *fshader) {
 
   chkerr(read_shader(vshader, &vlen, &vert_shader));
   chkerr(read_shader(fshader, &flen, &frag_shader));
-  chkerr(create_shader(r, vert_shader, vlen, &r->vert_module));
-  chkerr(create_shader(r, frag_shader, flen, &r->frag_module));
+  chkerr(create_shader(r, vert_shader, vlen, &vert_module));
+  chkerr(create_shader(r, frag_shader, flen, &frag_module));
   free(vert_shader);
   free(frag_shader);
   shader_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_info[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  shader_info[0].module = r->vert_module;
+  shader_info[0].module = vert_module;
   shader_info[0].pName = "main";
   shader_info[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   shader_info[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  shader_info[1].module = r->frag_module;
+  shader_info[1].module = frag_module;
   shader_info[1].pName = "main";
 
   vertex_info.sType =
     VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertex_info.vertexBindingDescriptionCount = 1;
+  vertex_info.vertexBindingDescriptionCount = (uint32_t) n_bindings;
   vertex_info.pVertexBindingDescriptions = bindings;
-  vertex_info.vertexAttributeDescriptionCount =
-    sizeof(attrs) / sizeof(attrs[0]);
+  vertex_info.vertexAttributeDescriptionCount = (uint32_t) n_attrs;
   vertex_info.pVertexAttributeDescriptions = attrs;
 
   assembly_info.sType =
@@ -632,9 +697,12 @@ static int create_pipeline(struct render *r, char *vshader, char *fshader) {
     1,
     &graphics_pipeline,
     NULL,
-    &r->pipeline);
+    &r->pipeline
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_CREATE_PIPELINE;
   r->vkDestroyPipelineLayout(r->device, layout, NULL);
+  r->vkDestroyShaderModule(r->device, vert_module, NULL);
+  r->vkDestroyShaderModule(r->device, frag_module, NULL);
 
   return 0;
 }
@@ -706,7 +774,8 @@ static int create_command_pool(struct render *r) {
     r->device,
     &create_info,
     NULL,
-    &r->command_pool);
+    &r->command_pool
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_COMMAND_POOL;
   return RENDER_ERROR_NONE;
 }
@@ -724,7 +793,8 @@ static int create_command_buffers(struct render *r) {
   result = r->vkAllocateCommandBuffers(
     r->device,
     &allocate_info,
-    r->command_buffers);
+    r->command_buffers
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_COMMAND_BUFFER;
   return RENDER_ERROR_NONE;
 }
@@ -787,7 +857,8 @@ static int write_data(
     range.offset,
     range.size,
     0,
-    &dst);
+    &dst
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_MEMORY_MAP;
   memcpy(dst, data, range.size);
   result = r->vkFlushMappedMemoryRanges(r->device, 1, &range);
@@ -814,7 +885,8 @@ static int allocate_buffer(
   index = get_heap_index(
     r,
     reqs.memoryTypeBits,
-    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+  );
   if (index < 0) return RENDER_ERROR_VULKAN_MEMORY;
   allocate_info.memoryTypeIndex = (uint32_t) index;
   result = r->vkAllocateMemory(r->device, &allocate_info, NULL, mem);
@@ -839,12 +911,14 @@ static int create_vertex_data(struct render *r) {
     r,
     &r->vertex_buffer,
     size_verts,
-    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
+    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+  ));
   chkerr(create_buffer(
     r,
     &r->index_buffer,
     size_indices,
-    VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
+    VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+  ));
   chkerr(allocate_buffer(r, &r->vertex_buffer, &r->vertex_memory));
   chkerr(allocate_buffer(r, &r->index_buffer, &r->index_memory));
   chkerr(write_data(r, &r->vertex_memory, vertices, size_verts));
@@ -877,25 +951,29 @@ static int write_buffers(struct render *r) {
     r->vkCmdBeginRenderPass(
       r->command_buffers[i],
       &render_info,
-      VK_SUBPASS_CONTENTS_INLINE);
+      VK_SUBPASS_CONTENTS_INLINE
+    );
     {
       VkDeviceSize offsets[] = { 0 };
 
       r->vkCmdBindPipeline(
         r->command_buffers[i],
         VK_PIPELINE_BIND_POINT_GRAPHICS,
-        r->pipeline);
+        r->pipeline
+      );
       r->vkCmdBindVertexBuffers(
         r->command_buffers[i],
         0,
         1,
         &r->vertex_buffer,
-        offsets);
+        offsets
+      );
       r->vkCmdBindIndexBuffer(
         r->command_buffers[i],
         r->index_buffer,
         0,
-        VK_INDEX_TYPE_UINT16);
+        VK_INDEX_TYPE_UINT16
+      );
       r->vkCmdDrawIndexed(r->command_buffers[i], 6, 1, 0, 0, 0);
     }
     r->vkCmdEndRenderPass(r->command_buffers[i]);
@@ -914,13 +992,15 @@ static int create_semaphores(struct render *r) {
     r->device,
     &create_info,
     NULL,
-    &r->image_semaphore);
+    &r->image_semaphore
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SEMAPHORE;
   result = r->vkCreateSemaphore(
     r->device,
     &create_info,
     NULL,
-    &r->render_semaphore);
+    &r->render_semaphore
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_SEMAPHORE;
   return RENDER_ERROR_NONE;
 }
@@ -950,7 +1030,7 @@ void render_deinit(struct render *r) {
   r->vkDestroyDevice(r->device, NULL);
   r->vkDestroyInstance(r->instance, NULL);
   dlclose(r->vklib);
-  memset((unsigned char *) r, 0, sizeof(struct render));
+  memset((void *) r, 0, sizeof(struct render));
 }
 
 int render_configure(
@@ -960,22 +1040,41 @@ int render_configure(
   char *vshader,
   char *fshader
 ) {
+  VkVertexInputBindingDescription bindings[] = {
+    { 0, sizeof(float) * 6, VK_VERTEX_INPUT_RATE_VERTEX }
+  };
+  VkVertexInputAttributeDescription attrs[] = {
+    { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0 },
+    { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3 }
+  };
+
   if (!r) return RENDER_ERROR_NULL;
   render_destroy_pipeline(r);
   r->phys_id = 0;
-  chkerr(get_queue_props(r));
-  chkerr(get_present_and_graphics_indices(r));
-  chkerr(create_device(r));
-  chkerr(load_device_functions(r));
-  chkerr(get_surface_format(r));
-  chkerr(create_swapchain(r));
-  chkerr(create_pipeline(r, vshader, fshader));
-  chkerr(create_framebuffers(r));
-  chkerr(create_command_pool(r));
-  chkerr(create_command_buffers(r));
-  chkerr(create_vertex_data(r));
-  chkerr(write_buffers(r));
-  chkerr(create_semaphores(r));
+
+  chkerrf(get_queue_props(r),       { render_destroy_pipeline(r); });
+  chkerrf(get_queue_indices(r),     { render_destroy_pipeline(r); });
+  chkerrf(create_device(r),         { render_destroy_pipeline(r); });
+  chkerrf(load_device_functions(r), { render_destroy_pipeline(r); });
+  chkerrf(get_surface_format(r),    { render_destroy_pipeline(r); });
+  chkerrf(create_swapchain(r),      { render_destroy_pipeline(r); });
+  chkerrf(create_pipeline(
+    r,
+    sizeof(bindings) / sizeof(bindings[0]),
+    bindings,
+    sizeof(attrs) / sizeof(attrs[0]),
+    attrs,
+    vshader,
+    fshader
+  ), {
+    render_destroy_pipeline(r);
+  });
+  chkerrf(create_framebuffers(r),    { render_destroy_pipeline(r); });
+  chkerrf(create_command_pool(r),    { render_destroy_pipeline(r); });
+  chkerrf(create_command_buffers(r), { render_destroy_pipeline(r); });
+  chkerrf(create_vertex_data(r),     { render_destroy_pipeline(r); });
+  chkerrf(write_buffers(r),          { render_destroy_pipeline(r); });
+  chkerrf(create_semaphores(r),      { render_destroy_pipeline(r); });
   r->has_pipeline = 1;
   return RENDER_ERROR_NONE;
 }
@@ -995,7 +1094,8 @@ void render_destroy_pipeline(struct render *r) {
       r->device,
       r->command_pool,
       (uint32_t) r->n_swapchain_images,
-      r->command_buffers);
+      r->command_buffers
+    );
     free(r->command_buffers);
     r->vkDestroyCommandPool(r->device, r->command_pool, NULL);
     for (i = 0; i < r->n_swapchain_images; ++i) {
@@ -1005,8 +1105,8 @@ void render_destroy_pipeline(struct render *r) {
     free(r->framebuffers);
     free(r->image_views);
     free(r->swapchain_images);
-    r->vkDestroyShaderModule(r->device, r->vert_module, NULL);
-    r->vkDestroyShaderModule(r->device, r->frag_module, NULL);
+    /* r->vkDestroyShaderModule(r->device, r->vert_module, NULL); */
+    /* r->vkDestroyShaderModule(r->device, r->frag_module, NULL); */
     r->vkDestroyPipeline(r->device, r->pipeline, NULL);
     r->vkDestroyRenderPass(r->device, r->render_pass, NULL);
     free(r->queue_props);
@@ -1029,7 +1129,8 @@ int render_update(struct render *r) {
     (uint64_t) 2e9L,
     r->image_semaphore,
     VK_NULL_HANDLE,
-    &image_index);
+    &image_index
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_ACQUIRE_IMAGE;
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit_info.waitSemaphoreCount = 1;
@@ -1044,7 +1145,8 @@ int render_update(struct render *r) {
     r->graphics_queue,
     1,
     &submit_info,
-    VK_NULL_HANDLE);
+    VK_NULL_HANDLE
+  );
   if (result != VK_SUCCESS) return RENDER_ERROR_VULKAN_QUEUE_SUBMIT;
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present_info.waitSemaphoreCount = 1;

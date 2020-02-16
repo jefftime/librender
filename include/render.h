@@ -1,6 +1,6 @@
-/* This file is a part of librender
+/* Copyright 2019, Jeffery Stager
  *
- * Copyright 2019, Jeffery Stager
+ * This file is part of librender.
  *
  * librender is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -60,23 +60,24 @@ struct window;
 #define RENDER_ERROR_VULKAN_SWAPCHAIN                 -22
 #define RENDER_ERROR_VULKAN_SHADER_MODULE             -23
 #define RENDER_ERROR_VULKAN_SHADER_READ               -24
-#define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT           -25
-#define RENDER_ERROR_VULKAN_CREATE_PIPELINE           -26
-#define RENDER_ERROR_VULKAN_RENDER_PASS               -27
-#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES          -28
-#define RENDER_ERROR_VULKAN_IMAGE_VIEW                -29
-#define RENDER_ERROR_VULKAN_FRAMEBUFFER               -30
-#define RENDER_ERROR_VULKAN_COMMAND_POOL              -31
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER            -32
-#define RENDER_ERROR_VULKAN_BUFFER                    -33
-#define RENDER_ERROR_VULKAN_MEMORY                    -34
-#define RENDER_ERROR_VULKAN_MEMORY_MAP                -35
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN      -36
-#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END        -37
-#define RENDER_ERROR_VULKAN_SEMAPHORE                 -38
-#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE             -39
-#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT              -40
-#define RENDER_ERROR_VULKAN_QUEUE_PRESENT             -41
+#define RENDER_ERROR_VULKAN_DESCRIPTOR_SET_LAYOUT     -25
+#define RENDER_ERROR_VULKAN_PIPELINE_LAYOUT           -26
+#define RENDER_ERROR_VULKAN_CREATE_PIPELINE           -27
+#define RENDER_ERROR_VULKAN_RENDER_PASS               -28
+#define RENDER_ERROR_VULKAN_SWAPCHAIN_IMAGES          -29
+#define RENDER_ERROR_VULKAN_IMAGE_VIEW                -30
+#define RENDER_ERROR_VULKAN_FRAMEBUFFER               -31
+#define RENDER_ERROR_VULKAN_COMMAND_POOL              -32
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER            -33
+#define RENDER_ERROR_VULKAN_BUFFER                    -34
+#define RENDER_ERROR_VULKAN_MEMORY                    -35
+#define RENDER_ERROR_VULKAN_MEMORY_MAP                -36
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_BEGIN      -37
+#define RENDER_ERROR_VULKAN_COMMAND_BUFFER_END        -38
+#define RENDER_ERROR_VULKAN_SEMAPHORE                 -39
+#define RENDER_ERROR_VULKAN_ACQUIRE_IMAGE             -40
+#define RENDER_ERROR_VULKAN_QUEUE_SUBMIT              -41
+#define RENDER_ERROR_VULKAN_QUEUE_PRESENT             -42
 
 /* Easily get vulkan function definitions */
 #define vkfunc(f) PFN_##f f
@@ -148,6 +149,8 @@ struct render {
   vkfunc(vkDestroyBuffer);
   vkfunc(vkFreeMemory);
   vkfunc(vkDestroySemaphore);
+  vkfunc(vkCreateDescriptorSetLayout);
+  vkfunc(vkDestroyDescriptorSetLayout);
 
   /* Vulkan state */
   VkInstance instance;
@@ -169,11 +172,12 @@ struct render {
   VkDeviceMemory index_memory;
   VkQueue graphics_queue;
   VkQueue present_queue;
+  VkDescriptorSetLayout descriptor_set_layout;
 
   /* Pipeline */
   int has_pipeline;
-  VkShaderModule vert_module;
-  VkShaderModule frag_module;
+  /* VkShaderModule vert_module; */
+  /* VkShaderModule frag_module; */
   VkRenderPass render_pass;
   VkPipeline pipeline;
   size_t n_swapchain_images;
@@ -199,6 +203,8 @@ int render_configure(
 );
 void render_destroy_pipeline(struct render *r);
 int render_update(struct render *r);
+int render_draw(struct render *r);
+int render_load(struct render *r, size_t n, void *data);
 /* **************************************** */
 
 #endif
